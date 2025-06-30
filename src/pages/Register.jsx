@@ -1,3 +1,4 @@
+// src/pages/Register.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
@@ -7,18 +8,29 @@ function Register() {
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name, email, password }),
+      });
 
-    const userData = {
-      name,
-      email,
-      password,
-    };
+      const data = await res.json();
 
-    localStorage.setItem("user_data", JSON.stringify(userData));
-    alert("✅ Registered Successfully");
-    navigate("/login");
+      if (res.ok) {
+        alert("✅ Registered successfully. Please log in.");
+        navigate("/login");
+      } else {
+        alert("❌ " + data.message);
+      }
+    } catch (err) {
+      alert("Something went wrong during registration.");
+      console.error(err);
+    }
   };
 
   return (
@@ -69,6 +81,16 @@ function Register() {
             Login
           </Link>
         </p>
+        <p className="text-sm text-center mt-2">
+  <button
+    onClick={() => navigate("/")}
+    className="text-gray-500 hover:underline"
+    type="button"
+  >
+    🔙 Back to Home
+  </button>
+</p>
+  
       </form>
     </div>
   );

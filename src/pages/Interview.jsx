@@ -8,23 +8,15 @@ function Interview() {
   const [answer, setAnswer] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [recognition, setRecognition] = useState(null);
-  const [questionCount, setQuestionCount] = useState(0);
-  const plan = localStorage.getItem("user_plan") || "Free (3 Questions/Day)";
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) navigate("/login");
 
-    const today = new Date().toISOString().split("T")[0];
-    const storedDate = localStorage.getItem("last_question_date");
-    const storedCount = parseInt(localStorage.getItem("question_count")) || 0;
-
-    if (storedDate === today) {
-      setQuestionCount(storedCount);
-    } else {
-      localStorage.setItem("last_question_date", today);
-      localStorage.setItem("question_count", "0");
-      setQuestionCount(0);
+    const apiKey = localStorage.getItem("openai_api_key");
+    if (!apiKey) {
+      alert("🔐 You need to set your OpenAI API key first.");
+      navigate("/set-api-key");
     }
 
     if (!("webkitSpeechRecognition" in window)) {
@@ -63,25 +55,13 @@ function Interview() {
   };
 
   const handleGenerateAnswer = async () => {
-    const limits = {
-      "Free (3 Questions/Day)": 3,
-      "Basic ₹149": 100,
-      "Pro ₹299": 200,
-    };
-
-    const maxAllowed = limits[plan] || 3;
-
-    if (questionCount >= maxAllowed) {
-      alert(`❌ Daily limit reached for your plan (${maxAllowed} questions/day).`);
-      return;
-    }
-
     const resumeText = localStorage.getItem("resume_text") || "";
     const extraInfo = localStorage.getItem("extra_info") || "";
     const apiKey = localStorage.getItem("openai_api_key");
+    const userToken = localStorage.getItem("token");
 
-    if (!apiKey) {
-      alert("OpenAI API key not set. Please go to 'Set API Key' page.");
+    if (!question.trim()) {
+      alert("Please enter a question.");
       return;
     }
 
@@ -93,7 +73,7 @@ Question: ${question}
 
 Provide a clear, confident, short answer.`;
 
-    setAnswer("Generating answer...");
+    setAnswer("⏳ Generating answer...");
 
     try {
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -109,33 +89,37 @@ Provide a clear, confident, short answer.`;
       });
 
       const data = await res.json();
-      const response = data.choices?.[0]?.message?.content || "No answer received.";
-      setAnswer(response);
+      const finalAnswer = data.choices?.[0]?.message?.content || "No answer received.";
+      setAnswer(finalAnswer);
 
-      const newCount = questionCount + 1;
-      localStorage.setItem("question_count", newCount.toString());
-      setQuestionCount(newCount);
-
+      // ✅ Save answer to backend
+      await fetch("http://localhost:5000/api/answers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify({
+          question,
+          answer: finalAnswer,
+          type: "live",
+        }),
+      });
     } catch (err) {
       console.error(err);
-      setAnswer("Failed to get response. Check your API key or network.");
+      setAnswer("❌ Failed to get response. Check your API key or network.");
     }
   };
 
-  const questionsLeft = Math.max(({
-    "Free (3 Questions/Day)": 3,
-    "Basic ₹149": 100,
-    "Pro ₹299": 200
-  }[plan] || 3) - questionCount, 0);
-
   return (
     <div className="min-h-screen bg-yellow-50 flex flex-col items-center justify-start p-6">
-      <h2 className="text-2xl font-bold text-gray-800 mb-2">🎧 Live Interview Assistant</h2>
-      <p className="text-sm text-gray-600 mb-4">Questions Left Today: {questionsLeft}</p>
+      <h2 className="text-2xl font-bold text-gray-800 mb-4">🎧 Live Interview Assistant</h2>
 
       <button
         onClick={handleListen}
-        className={`mb-4 px-6 py-2 rounded-xl text-white font-semibold shadow ${isListening ? "bg-red-500" : "bg-yellow-500 hover:bg-yellow-600"}`}
+        className={`mb-4 px-6 py-2 rounded-xl text-white font-semibold shadow ${
+          isListening ? "bg-red-500" : "bg-yellow-500 hover:bg-yellow-600"
+        }`}
       >
         {isListening ? "🎙️ Stop Listening" : "🎤 Start Listening"}
       </button>

@@ -1,26 +1,38 @@
+// src/pages/Login.jsx
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const savedUser = JSON.parse(localStorage.getItem("user_data"));
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (!savedUser) {
-      setError("❌ No user found. Please register first.");
-      return;
-    }
+      const data = await res.json();
 
-    if (email === savedUser.email && password === savedUser.password) {
-      localStorage.setItem("user_token", "mock-token");
-      navigate("/dashboard");
-    } else {
-      setError("❌ Invalid email or password.");
+      if (res.ok) {
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user_name", data.user.name);
+        localStorage.setItem("user_email", data.user.email);
+        localStorage.setItem("user_plan", data.user.plan || "free");
+
+        navigate("/dashboard");
+      } else {
+        alert("❌ " + data.message);
+      }
+    } catch (err) {
+      alert("Login failed.");
+      console.error(err);
     }
   };
 
@@ -31,10 +43,6 @@ function Login() {
         className="bg-white p-6 rounded-xl shadow-md w-full max-w-md"
       >
         <h2 className="text-2xl font-bold mb-4 text-gray-800">🔐 Login</h2>
-
-        {error && (
-          <p className="text-sm text-red-600 mb-2 text-center">{error}</p>
-        )}
 
         <input
           type="email"
@@ -67,6 +75,16 @@ function Login() {
             Register
           </Link>
         </p>
+        <p className="text-sm text-center mt-2">
+  <button
+    onClick={() => navigate("/")}
+    className="text-gray-500 hover:underline"
+    type="button"
+  >
+    🔙 Back to Home
+  </button>
+</p>
+
       </form>
     </div>
   );

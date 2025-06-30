@@ -12,6 +12,13 @@ import Register from './pages/Register';
 import PricingPlans from './pages/PricingPlans';
 import UpgradePlan from "./components/UpgradePlan";
 import AdminPanel from './pages/AdminPanel';
+import MockInterview from "./pages/MockInterview";
+import History from "./pages/History";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsAndConditions from "./pages/TermsAndConditions";
+import RefundPolicy from "./pages/RefundPolicy";
+import ContactUs from "./pages/ContactUs";
+
 
 import PrivateRoute from './components/PrivateRoute'; // 🔐 Auth guard
 
@@ -24,6 +31,11 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/admin" element={<AdminPanel />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+<Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+<Route path="/refund-policy" element={<RefundPolicy />} />
+<Route path="/contact-us" element={<ContactUs />} />
+        
 
         {/* 🔐 Protected Routes */}
         <Route
@@ -81,7 +93,25 @@ function App() {
               <Interview />
             </PrivateRoute>
           }
+          
         />
+        <Route
+  path="/mock-interview"
+  element={
+    <PrivateRoute>
+      <MockInterview />
+    </PrivateRoute>
+  }
+/>
+       <Route
+        path="/history"
+        element={
+          <PrivateRoute>
+            <History />
+          </PrivateRoute>
+        }
+      />
+
         <Route
           path="/set-api-key"
           element={
@@ -92,6 +122,7 @@ function App() {
         />
       </Routes>
     </Router>
+    
   );
 }
 
