@@ -1,7 +1,10 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import homebg from "../assets/homebg.jpg"; // your actual background image
 
-const Home = ({ setShowModal }) => {
+const Home = () => {
+  const navigate = useNavigate();
+
   return (
     <div
       className="w-full h-screen bg-cover bg-center flex items-center"
@@ -32,7 +35,8 @@ const Home = ({ setShowModal }) => {
           </ul>
 
           <button
-            onClick={() => setShowModal(true)} // ✅ Fix here
+          onClick={() => navigate("/register", { replace: true })}
+
             className="px-6 py-3 text-white bg-[#9c48e1] border-pink-500 rounded-full font-semibold hover:bg-pink-600 transition-all"
           >
             Get Started

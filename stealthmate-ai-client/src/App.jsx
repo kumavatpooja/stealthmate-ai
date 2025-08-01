@@ -21,11 +21,14 @@ const App = () => {
     <>
       <ToastContainer />
       <Navbar />
+
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+     <Route path="/register" element={<Register key={window.location.pathname} />} />
+
         <Route path="/google-success" element={<GoogleSuccess />} />
+
         <Route
           path="/dashboard"
           element={
@@ -34,12 +37,20 @@ const App = () => {
             </PrivateRoute>
           }
         />
+
         <Route
           path="/admin"
           element={
-            user?.role === "admin" ? <Admin /> : <Navigate to="/" replace />
+            user?.role === "admin" ? (
+              <Admin />
+            ) : (
+              <Navigate to="/" replace />
+            )
           }
         />
+
+        {/* 🔁 Catch-all fallback route */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );
