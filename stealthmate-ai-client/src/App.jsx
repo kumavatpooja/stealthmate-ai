@@ -1,49 +1,48 @@
-import { Routes, Route } from "react-router-dom";
-import Home from "./pages/Home";
-import LoginRegister from "./pages/LoginRegister";
-import Pricing from "./pages/Pricing";
-import ResumeUpload from "./pages/ResumeUpload";
-import Dashboard from "./pages/Dashboard";
-import LiveInterview from "./pages/LiveInterview";
-import History from "./pages/History";
-import Support from "./pages/Support";
-import FAQ from "./pages/FAQ";
-import TermsAndCondition from "./pages/TermsAndCondition";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import RefundPolicy from "./pages/RefundPolicy";
-import PaymentSuccess from "./pages/PaymentSuccess";
-import GoogleDocHelp from "./pages/GoogleDocHelp";
-import ForgotPassword from "./pages/ForgotPassword"; // ✅ NEW: fallback
-import NotFound from "./pages/NotFound";             // ✅ NEW: 404 fallback
-import Navbar from "./components/Navbar";
-import Footer from "./components/Footer";
+import React from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
-export default function App() {
+import Navbar from "./components/Navbar";
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import GoogleSuccess from "./pages/GoogleSuccess";
+import Dashboard from "./pages/Dashboard";
+import Admin from "./pages/Admin";
+import PrivateRoute from "./routes/PrivateRoute";
+
+import { useAuthContext } from "./context/AuthContext";
+
+const App = () => {
+  const { user } = useAuthContext();
+
   return (
     <>
+      <ToastContainer />
       <Navbar />
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/register" element={<LoginRegister />} />
-        <Route path="/login" element={<LoginRegister />} />
-        <Route path="/pricing" element={<Pricing />} />
-        <Route path="/resume-upload" element={<ResumeUpload />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/live-interview" element={<LiveInterview />} />
-        <Route path="/history" element={<History />} />
-        <Route path="/support" element={<Support />} />
-        <Route path="/faq" element={<FAQ />} />
-        <Route path="/terms" element={<TermsAndCondition />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/refund" element={<RefundPolicy />} />
-        <Route path="/payment-success" element={<PaymentSuccess />} />
-        <Route path="/google-help" element={<GoogleDocHelp />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} /> {/* ✅ Fix route error */}
-
-        {/* Catch-all route for 404 */}
-        <Route path="*" element={<NotFound />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/google-success" element={<GoogleSuccess />} />
+        <Route
+          path="/dashboard"
+          element={
+            <PrivateRoute>
+              <Dashboard />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            user?.role === "admin" ? <Admin /> : <Navigate to="/" replace />
+          }
+        />
       </Routes>
-      <Footer />
     </>
   );
-}
+};
+
+export default App;

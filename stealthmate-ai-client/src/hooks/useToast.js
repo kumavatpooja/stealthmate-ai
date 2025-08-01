@@ -1,24 +1,25 @@
+// src/hooks/useToast.js
 import { toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 
-export default function useToast() {
-  const success = (msg) =>
-    toast.success(msg, {
-      position: "top-right",
-      autoClose: 3000,
-      hideProgressBar: false,
-      pauseOnHover: true,
-      draggable: true,
-    });
+const baseOptions = {
+  position: "top-center",
+  autoClose: 2500,
+  hideProgressBar: false,
+  closeOnClick: true,
+  pauseOnHover: true,
+  draggable: true,
+  theme: "light",
+  style: {
+    borderRadius: "8px",
+    fontWeight: "600",
+  },
+};
 
-  const error = (msg) =>
-    toast.error(msg, {
-      position: "top-right",
-      autoClose: 3000,
-      hideProgressBar: false,
-      pauseOnHover: true,
-      draggable: true,
-    });
+export function useToast() {
+  const success = (msg, opts = {}) => toast.success(msg, { ...baseOptions, ...opts });
+  const error = (msg, opts = {}) => toast.error(msg, { ...baseOptions, ...opts });
+  const info = (msg, opts = {}) => toast.info(msg, { ...baseOptions, ...opts });
+  const warning = (msg, opts = {}) => toast.warn(msg, { ...baseOptions, ...opts });
 
-  return { success, error };
+  return { success, error, info, warning };
 }

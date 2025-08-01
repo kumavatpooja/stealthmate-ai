@@ -1,22 +1,21 @@
-// tailwind.config.js
+/** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    "./src/**/*.{js,ts,jsx,tsx,html}",
+    "./index.html",
+    "./src/**/*.{js,jsx}"
   ],
   theme: {
     extend: {
       colors: {
-        primary: "#A835f2",       // Deep Indigo
-        secondary: "#f23598",     // Teal Cyan
-        background: "#F5F7FA",    // Light Background
-        surface: "#FFFFFF",       // White
-        cta: "#FFB400",           // Mustard Yellow
-
-        textDark: "#333333",      // For default text
-        textLight: "#FFFFFF",     // For text on dark bg
-        borderGrey: "#D9D9D9",    // Light border
+        magenta: '#d63384',
+        purple: '#6f42c1',
+        dark: '#333333',
+        light: '#f9f9f9',
+      },
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
       },
     },
   },
   plugins: [],
-};
+}

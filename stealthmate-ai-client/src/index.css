@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Optional font smoothing */
 body {
-  @apply bg-primary text-textLight font-sans;
+  font-family: 'Inter', sans-serif;
+  @apply bg-light text-dark;
 }
