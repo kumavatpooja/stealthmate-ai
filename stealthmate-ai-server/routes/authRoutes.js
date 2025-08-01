@@ -89,7 +89,7 @@ router.post('/login/verify', async (req, res) => {
     await user.save();
 
     const token = generateToken(user);
-    res.json({ token, user });
+    res.json({ token, });
   } catch (err) {
     console.error("❌ OTP Verify Error:", err.message);
     res.status(500).json({ message: "Server error during OTP verification" });

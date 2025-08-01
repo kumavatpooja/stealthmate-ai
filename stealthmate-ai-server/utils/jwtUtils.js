@@ -1,18 +1,23 @@
+// utils/jwtUtils.js
+
 const jwt = require('jsonwebtoken');
 
 const generateToken = (user) => {
   const token = jwt.sign(
-    { userId: user._id, email: user.email },
+    {
+      name: user.name,              // ✅ Add full name
+      email: user.email,
+      role: user.role || "user",    // ✅ Optional role
+      userId: user._id              // ✅ Always add userId
+    },
     process.env.JWT_SECRET,
     { expiresIn: '24h' }
   );
 
-  // Save token to user DB
   user.lastToken = token;
-  user.save(); // 🔐 Save current token as last valid one
+  user.save();
 
   return token;
 };
 
 module.exports = { generateToken };
-
