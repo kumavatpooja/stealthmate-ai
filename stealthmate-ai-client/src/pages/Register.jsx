@@ -5,7 +5,7 @@ import { useToast } from "../hooks/useToast";
 
 import LoginCard from "../assets/logincard.png";
 import userIcon from "../assets/user.png";
-import GoogleIcon from "../assets/Googleicon.jpg";
+import GoogleIcon from "../assets/googleicon.jpg";
 
 const Register = () => {
   const [email, setEmail] = useState("");
