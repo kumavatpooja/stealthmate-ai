@@ -1,3 +1,4 @@
+
 const express = require("express");
 const router = express.Router();
 const authenticateUser = require("../middleware/authMiddleware");
@@ -6,7 +7,6 @@ const generateMockInterview = require("../utils/mockInterviewUtils");
 const Resume = require("../models/Resume");
 const authMiddleware = require('../middleware/authMiddleware');
 const {generateMockFeedback } = require('../utils/mockInterviewUtils');
-
 
 
 
@@ -49,3 +49,4 @@ router.post('/feedback', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+

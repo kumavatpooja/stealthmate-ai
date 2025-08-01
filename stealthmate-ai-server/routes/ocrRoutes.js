@@ -1,33 +1,30 @@
-// 📍 path: backend/routes/ocrRoutes.js
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const multer = require("multer");
-const Tesseract = require("tesseract.js");
-const authMiddleware = require("../middleware/authMiddleware");
+const multer = require('multer');
+const Tesseract = require('tesseract.js');
+const authMiddleware = require('../middleware/authMiddleware');
 
+// Multer Setup
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-router.post("/image", authMiddleware, upload.single("image"), async (req, res) => {
+// Route: POST /api/ocr/image
+router.post('/image', authMiddleware, upload.single('image'), async (req, res) => {
   try {
     if (!req.file || !req.file.buffer) {
-      return res.status(400).json({ message: "No image file uploaded" });
+      return res.status(400).json({ message: 'No image file uploaded' });
     }
 
     const imageBuffer = req.file.buffer;
 
-    const result = await Tesseract.recognize(imageBuffer, "eng");
-    const extractedText = result.data.text;
-
-    if (!extractedText || extractedText.trim() === "") {
-      return res.status(400).json({ message: "Text could not be extracted from image." });
-    }
-
-    res.json({ text: extractedText.trim() });
+    const result = await Tesseract.recognize(imageBuffer, 'eng');
+    res.json({ text: result.data.text });
   } catch (err) {
-    console.error("❌ OCR error:", err);
-    res.status(500).json({ message: "OCR failed", error: err.message });
+    console.error('❌ OCR error:', err);
+    res.status(500).json({ message: 'OCR failed', error: err.message });
   }
 });
 
 module.exports = router;
+
+

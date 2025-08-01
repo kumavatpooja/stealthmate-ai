@@ -4,26 +4,16 @@ const cors = require('cors');
 const passport = require('passport');
 const session = require('express-session');
 const cron = require('node-cron');
-const fs = require('fs');
+const morgan = require('morgan');
 require('dotenv').config();
-
-// 🗄️ Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('✅ Connected to MongoDB'))
-.catch((err) => {
-  console.error('❌ MongoDB connection error:', err.message);
-  process.exit(1);
-});
 
 // 📦 Models
 const User = require('./models/User');
 
-// 🔐 Auth Config
+// 🔐 Passport Google Auth Strategy
 require('./config/googleAuth');
 
+// 📦 Routes
 const authRoutes = require('./routes/authRoutes');
 const resumeRoutes = require('./routes/resumeRoutes');
 const aiRoutes = require('./routes/aiRoutes');
@@ -37,26 +27,48 @@ const liveInterviewRoutes = require('./routes/liveInterviewRoutes');
 const supportRoutes = require('./routes/supportRoutes');
 const liveInterviewSpeechRoutes = require('./routes/liveInterviewSpeechRoutes');
 
+// ⚙️ App Setup
 const app = express();
+const PORT = process.env.PORT || 10000;
 
-// ✅ Ensure uploads directory exists
-const uploadDir = './uploads';
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-  console.log('📂 uploads/ folder created');
+// 🔧 Logger for development
+if (process.env.NODE_ENV !== 'production') {
+  app.use(morgan('dev'));
 }
 
-// ⚙️ Middleware
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// ✅ Safer CORS Setup
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL // e.g. https://stealthmate-ai.netlify.app
+];
 
-app.use(session({
-  secret: 'stealthmate_secret_session',
-  resave: false,
-  saveUninitialized: false,
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS not allowed from this origin: ' + origin));
+    }
+  },
+  credentials: true
 }));
 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 🛡️ Session Management
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-default-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+  }
+}));
+
+// 🔐 Passport Setup
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -70,16 +82,16 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/ocr', ocrRoutes);
 app.use('/api/ocr', ocrToAiRoutes);
-app.use('/api/live', liveInterviewRoutes);            // /ask route
-app.use('/api/live', liveInterviewSpeechRoutes);      // /speech route
+app.use('/api/live', liveInterviewRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/live', liveInterviewSpeechRoutes);
 
 // 🩺 Health Check
 app.get('/api/test/ping', (req, res) => {
   res.json({ message: '✅ StealthMate AI Server Running' });
 });
 
-// 🔁 Daily Plan Reset (00:00 every day)
+// 🔁 Cron Job: Reset plan daily at midnight
 cron.schedule('0 0 * * *', async () => {
   try {
     const now = new Date();
@@ -102,12 +114,21 @@ cron.schedule('0 0 * * *', async () => {
       await user.save();
     }
 
-    console.log("🔁 Daily plan & mock usage reset");
-  } catch (error) {
-    console.error("❌ Cron error:", error.message);
+    console.log('🔁 Daily usage reset completed.');
+  } catch (err) {
+    console.error('❌ Cron Job Error:', err.message);
   }
 });
 
-// 🚀 Start Server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// 🔗 Connect to MongoDB & Start Server
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => {
+  console.log('✅ MongoDB Connected');
+  app.listen(PORT, () =>
+    console.log(`🚀 Server running on http://localhost:${PORT}`)
+  );
+})
+.catch((err) => console.error('❌ MongoDB Connection Error:', err.message));

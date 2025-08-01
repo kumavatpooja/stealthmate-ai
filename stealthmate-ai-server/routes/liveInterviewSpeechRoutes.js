@@ -5,54 +5,56 @@ const fs = require('fs');
 const path = require('path');
 const { OpenAI } = require('openai');
 const authMiddleware = require('../middleware/authMiddleware');
-const clarifyQuestion = require('../utils/clarifyQuestion');
+const clarifyQuestion = require('../utils/clarifyQuestion'); // 🧠 Smart clarification
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// 🔧 Ensure uploads folder exists
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-
-// 📂 Multer config
+// 🗂️ Multer config for audio upload
 const storage = multer.diskStorage({
-  destination: uploadsDir,
+  destination: 'uploads/',
   filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-audio.webm`);
+    cb(null, `${Date.now()}-${file.originalname}`);
   },
 });
 const upload = multer({ storage });
 
+// 🎙️ POST /api/live/speech - Transcribe audio + clarify
 router.post('/speech', authMiddleware, upload.single('audio'), async (req, res) => {
   try {
-    const filePath = path.resolve(req.file.path);
-    const allowedTypes = ['audio/webm', 'audio/ogg', 'audio/wav', 'audio/mpeg'];
-
+    const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm'];
     if (!req.file || !allowedTypes.includes(req.file.mimetype)) {
-      return res.status(400).json({ message: 'Unsupported file type.' });
+      return res.status(400).json({ message: 'Unsupported file type. Use MP3, WAV, OGG, or WEBM.' });
     }
 
+    // 🎧 1. Transcribe speech to text
     const transcription = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(filePath),
+      file: fs.createReadStream(path.resolve(req.file.path)),
       model: 'whisper-1',
       response_format: 'text',
     });
 
     const originalText = transcription;
+
+    // 🧠 2. Clarify the transcribed question
     const clarifiedQuestion = await clarifyQuestion(originalText);
 
-    fs.unlink(filePath, (err) => {
-      if (err) console.error('❌ Error deleting audio:', err.message);
+    // 🧹 3. Clean up
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error('❌ Error deleting uploaded file:', err);
     });
 
-    res.json({ original: originalText, clarified: clarifiedQuestion });
+    // 📦 4. Return both
+    res.json({
+      original: originalText,
+      clarified: clarifiedQuestion,
+    });
   } catch (err) {
-    console.error('❌ Speech AI error:', err.message);
-    res.status(500).json({ message: 'Speech transcription failed', error: err.message });
+    console.error('❌ Speech Interview Error:', err);
+    res.status(500).json({ message: 'Speech interview failed', error: err.message });
   }
 });
 
 module.exports = router;
+

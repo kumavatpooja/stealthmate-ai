@@ -1,5 +1,3 @@
-// routes/historyRoutes.js
-
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
@@ -27,3 +25,7 @@ router.get('/my', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+
+
+
+

@@ -1,51 +1,102 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
 const passport = require('passport');
 const { OAuth2Client } = require('google-auth-library');
 
 const User = require('../models/User');
-const { sendOTP, sendResetPasswordEmail } = require('../utils/emailUtils');
+const { sendOTP } = require('../utils/emailUtils');
 const { generateToken } = require('../utils/jwtUtils');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// ✅ Email OTP Login
+// ✅ Register new user
+router.post('/register', async (req, res) => {
+  try {
+    const { name, email } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({ message: 'Name and email are required' });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(409).json({ message: 'User already exists' });
+    }
+
+    const newUser = new User({
+      name,
+      email,
+      isVerified: true,
+      authProvider: 'email',
+      plan: {
+        name: 'Free',
+        dailyLimit: 3,
+        usedToday: 0,
+        expiresAt: null,
+      },
+      usageCount: 0,
+    });
+
+    await newUser.save();
+
+    const token = generateToken(newUser);
+    res.status(201).json({ message: 'User registered successfully', token, user: newUser });
+  } catch (error) {
+    console.error('❌ Registration Error:', error.message);
+    res.status(500).json({ message: 'Server error during registration' });
+  }
+});
+
+// ✅ Send OTP
 router.post('/login/email', async (req, res) => {
   const { email } = req.body;
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-  let user = await User.findOne({ email });
-  if (!user) {
-    user = new User({ email, otp });
-  } else {
-    user.otp = otp;
-  }
+  try {
+    const user = await User.findOne({ email });
 
-  await user.save();
-  await sendOTP(email, otp);
-  res.json({ message: 'OTP sent to email' });
+    if (!user) {
+      return res.status(404).json({ message: 'User not registered. Please register first.' });
+    }
+
+    user.otp = otp;
+    await user.save();
+
+    console.log(`📩 OTP for ${email}: ${otp}`);
+
+    await sendOTP(email, otp);
+    res.json({ message: 'OTP sent to email' });
+  } catch (err) {
+    console.error("❌ OTP Send Error:", err.message);
+    res.status(500).json({ message: 'Failed to send OTP' });
+  }
 });
 
-// ✅ OTP Verify
+// ✅ Verify OTP
 router.post('/login/verify', async (req, res) => {
   const { email, otp } = req.body;
-  const user = await User.findOne({ email });
 
-  if (!user || user.otp !== otp) {
-    return res.status(401).json({ message: 'Invalid OTP' });
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user || user.otp !== otp) {
+      return res.status(401).json({ message: 'Invalid OTP' });
+    }
+
+    user.isVerified = true;
+    user.otp = null;
+    await user.save();
+
+    const token = generateToken(user);
+    res.json({ token, user });
+  } catch (err) {
+    console.error("❌ OTP Verify Error:", err.message);
+    res.status(500).json({ message: "Server error during OTP verification" });
   }
-
-  user.isVerified = true;
-  user.otp = null;
-  await user.save();
-
-  const token = generateToken(user);
-  res.json({ token, user });
 });
 
-// ✅ Google Login (JWT method)
+// ✅ Google Login – JWT Flow
 router.post('/login/google-token', async (req, res) => {
   const { token: googleToken } = req.body;
 
@@ -67,104 +118,43 @@ router.post('/login/google-token', async (req, res) => {
         picture,
         isVerified: true,
         authProvider: 'google',
-        plan: { name: 'Free' },
+        plan: {
+          name: 'Free',
+          dailyLimit: 3,
+          usedToday: 0,
+          expiresAt: null,
+        },
       });
       await user.save();
     }
 
     const token = generateToken(user);
     res.json({ token, user });
+
   } catch (error) {
     console.error('❌ Google Token Error:', error.message);
     res.status(401).json({ message: 'Invalid Google token' });
   }
 });
 
-// ✅ Google OAuth via Passport
+// ✅ Google OAuth Redirect Flow
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
 router.get('/google/callback',
-  passport.authenticate('google', { failureRedirect: '/' }),
+  passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL}/login` }),
   (req, res) => {
     const token = jwt.sign(
-      { userId: req.user._id, email: req.user.email },
+      {
+        userId: req.user._id,
+        email: req.user.email,
+        name: req.user.name, // ✅ Add name for frontend
+      },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    res.redirect(`http://localhost:5173/google-success?token=${token}`);
+
+    res.redirect(`${process.env.FRONTEND_URL}/google-success?token=${token}`);
   }
 );
-
-// ✅ Email + Password Registration
-router.post('/register', async (req, res) => {
-  const { name, email, password } = req.body;
-
-  let user = await User.findOne({ email });
-  if (user) return res.status(409).json({ message: 'Email already registered' });
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  const newUser = new User({
-    name,
-    email,
-    password: hashedPassword,
-    isVerified: true,
-    authProvider: 'email',
-    plan: { name: 'Free' }
-  });
-
-  await newUser.save();
-  const token = generateToken(newUser);
-  res.json({ token, user: newUser });
-});
-
-// ✅ Email + Password Login
-router.post('/login/password', async (req, res) => {
-  const { email, password } = req.body;
-
-  const user = await User.findOne({ email });
-  if (!user || !user.password) {
-    return res.status(401).json({ message: 'Invalid email or password' });
-  }
-
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) {
-    return res.status(401).json({ message: 'Invalid email or password' });
-  }
-
-  const token = generateToken(user);
-  res.json({ token, user });
-});
-
-// ✅ Forgot Password (Send reset link)
-router.post('/forgot-password', async (req, res) => {
-  const { email } = req.body;
-
-  const user = await User.findOne({ email });
-  if (!user) return res.status(404).json({ message: 'Email not found' });
-
-  const resetToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
-
-  await sendResetPasswordEmail(email, resetToken);
-  res.json({ message: 'Password reset link sent to email' });
-});
-
-// ✅ Reset Password
-router.post('/reset-password', async (req, res) => {
-  const { token, newPassword } = req.body;
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
-
-    res.json({ message: 'Password reset successful' });
-  } catch (error) {
-    return res.status(400).json({ message: 'Invalid or expired token' });
-  }
-});
 
 module.exports = router;

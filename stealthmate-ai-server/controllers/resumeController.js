@@ -18,3 +18,17 @@ exports.uploadResume = async (req, res) => {
     res.status(500).json({ message: 'Resume upload failed', error: err.message });
   }
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -22,3 +22,5 @@ const SupportMessageSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('SupportMessage', SupportMessageSchema);
+
+

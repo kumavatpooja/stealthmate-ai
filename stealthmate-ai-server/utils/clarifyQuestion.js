@@ -1,14 +1,16 @@
-// utils/clarifyQuestion.js
 const { OpenAI } = require("openai");
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 const clarifyQuestion = async (rawText) => {
   const prompt = `
-You're an AI trained to clarify unclear or broken voice-to-text questions during live interviews.
+You're an interview assistant. The question below may be unclear, broken, or misheard from speech.
 
-Original Input: "${rawText}"
+Original (possibly unclear): "${rawText}"
 
-Fix grammar and misheard words to make it a clear technical interview question.
+Rewrite this as a clear, complete technical interview question:
 `;
 
   const response = await openai.chat.completions.create({
@@ -22,3 +24,5 @@ Fix grammar and misheard words to make it a clear technical interview question.
 };
 
 module.exports = clarifyQuestion;
+
+

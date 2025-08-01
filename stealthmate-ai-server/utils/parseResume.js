@@ -1,3 +1,4 @@
+
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const atob = require('atob');
@@ -23,3 +24,4 @@ const parseResume = async (base64, type) => {
 };
 
 module.exports = parseResume;
+

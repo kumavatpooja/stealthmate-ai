@@ -1,18 +1,17 @@
+// utils/openaiUtils.js
 const OpenAI = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const generateAnswer = async (question, resume) => {
-  console.log("🧠 Question:", question);
-  console.log("📄 Resume Data:", resume);
-
   const resumeText = `
+Resume Info:
 Job Role: ${resume.jobRole}
 Preferred Language: ${resume.preferredLanguage}
 Tone: ${resume.tone}
 Goals: ${resume.goals}
+Extra Info: ${resume.extraInfo}
 Hobbies: ${resume.hobbies}
 Family Background: ${resume.familyBackground}
-Extra Info: ${resume.extraInfo}
 `;
 
   const prompt = `
@@ -36,3 +35,8 @@ Your answer:
 };
 
 module.exports = { generateAnswer };
+
+
+
+
+ 

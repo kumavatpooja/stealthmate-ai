@@ -10,36 +10,47 @@ const { generateAnswer } = require('../utils/openaiUtils');
 router.post('/ask', authMiddleware, checkPlanMiddleware, async (req, res) => {
   try {
     const { question } = req.body;
-
-    // ❗ Validate input
-    if (!question || !question.trim()) {
+    if (!question) {
       return res.status(400).json({ message: 'Question is required' });
     }
 
-    // ✅ Get user resume (latest one)
-    const resume = await Resume.findOne({ user: req.user.id }).sort({ createdAt: -1 });
+    // 📝 Get latest resume
+    const resume = await Resume.findOne({ user: req.userId }).sort({ createdAt: -1 });
     if (!resume) {
-      return res.status(404).json({ message: 'Resume not found. Please upload first.' });
+      return res.status(400).json({ message: 'Resume data missing. Please upload first.' });
     }
 
-    // ✅ Generate answer using OpenAI
+    // 🤖 Generate AI answer using resume
     const answer = await generateAnswer(question, resume);
 
-    // ✅ Save to interview log
+    // 💾 Save in InterviewLog
     const log = new InterviewLog({
-      user: req.user.id,
+      user: req.userId,
       question,
       answer,
-      source: 'live',
+      source: 'live'
     });
     await log.save();
 
-    // ✅ Return answer
     res.json({ answer });
   } catch (err) {
-    console.error('❌ /api/live/ask Error:', err);
-    res.status(500).json({ message: 'Failed to generate answer', error: err.message });
+    console.error('❌ Live Interview Error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// 📜 GET: User's live interview history
+router.get('/history', authMiddleware, async (req, res) => {
+  try {
+    const logs = await InterviewLog.find({ user: req.userId, source: 'live' }).sort({ createdAt: -1 });
+    res.json(logs);
+  } catch (err) {
+    console.error('❌ Fetching history error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
 module.exports = router;
+
+
+
