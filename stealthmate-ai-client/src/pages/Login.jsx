@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import { motion } from "framer-motion";
 import useAuth from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
+import api from "../utils/axios"; // centralized axios instance
 
 import LoginCard from "../assets/logincard.png";
 import userIcon from "../assets/user.png";
@@ -20,7 +20,7 @@ const Login = () => {
 
   const handleSendOtp = async () => {
     try {
-      await axios.post("http://localhost:10000/api/auth/login/email", {
+      await api.post("/auth/login/email", {
         email: email.trim(),
       });
       success("📩 OTP sent to your email");
@@ -34,14 +34,14 @@ const Login = () => {
 
   const handleVerifyOtp = async () => {
     try {
-      const res = await axios.post("http://localhost:10000/api/auth/login/verify", {
+      const res = await api.post("/auth/login/verify", {
         email,
         otp,
       });
 
       if (res.data?.token) {
         success("✅ Logged in successfully");
-        await login(res.data.token); // <--- await to ensure context updates
+        await login(res.data.token); // ensure context updates
         setOtp("");
         navigate("/dashboard");
       } else {
@@ -54,7 +54,8 @@ const Login = () => {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = "http://localhost:10000/api/auth/google";
+    // redirect to OAuth endpoint on backend (uses env via frontend)
+    window.location.href = `${import.meta.env.VITE_BACKEND_URL}/api/auth/google`;
   };
 
   return (
@@ -85,9 +86,13 @@ const Login = () => {
             </h2>
             <p className="text-sm mt-1 text-gray-500">
               Don’t have an account?{" "}
-              <a href="/register" className="text-pink-500 hover:underline">
+              <button
+                type="button"
+                onClick={() => navigate("/register")}
+                className="text-pink-500 hover:underline"
+              >
                 Register
-              </a>
+              </button>
             </p>
           </div>
 
@@ -117,11 +122,14 @@ const Login = () => {
               {showOtpField ? "Verify OTP" : "Send OTP"}
             </button>
 
-            <div className="text-center text-sm text-gray-500">or continue with</div>
+            <div className="text-center text-sm text-gray-500">
+              or continue with
+            </div>
 
             <button
               onClick={handleGoogleLogin}
               className="w-full py-3 rounded-full border border-gray-300 flex items-center justify-center gap-3 text-gray-700 hover:bg-gray-100"
+              type="button"
             >
               <img src={GoogleIcon} alt="Google" className="w-5 h-5" />
               Continue with Google
