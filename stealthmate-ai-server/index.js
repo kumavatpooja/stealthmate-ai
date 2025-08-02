@@ -36,37 +36,45 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
 
-// ✅ Safer CORS Setup
+// ✅ Robust CORS Setup
+const frontendUrl = process.env.FRONTEND_URL || 'https://stealthmate-ai.netlify.app';
 const allowedOrigins = [
-  'http://localhost:5173',
-  process.env.FRONTEND_URL // e.g. https://stealthmate-ai.netlify.app
+  'http://localhost:5173', // local dev
+  frontendUrl, // live frontend
 ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS not allowed from this origin: ' + origin));
-    }
-  },
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow requests with no origin (e.g., curl, mobile apps, or same-origin)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('CORS not allowed from this origin: ' + origin));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // 🛡️ Session Management
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-default-secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-  }
-}));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'your-default-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    },
+  })
+);
 
 // 🔐 Passport Setup
 app.use(passport.initialize());
@@ -107,7 +115,7 @@ cron.schedule('0 0 * * *', async () => {
           dailyLimit: 3,
           usedToday: 0,
           expiresAt: null,
-          lastUsed: null
+          lastUsed: null,
         };
       }
 
@@ -121,14 +129,12 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // 🔗 Connect to MongoDB & Start Server
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => {
-  console.log('✅ MongoDB Connected');
-  app.listen(PORT, () =>
-    console.log(`🚀 Server running on http://localhost:${PORT}`)
-  );
-})
-.catch((err) => console.error('❌ MongoDB Connection Error:', err.message));
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log('✅ MongoDB Connected');
+    app.listen(PORT, () =>
+      console.log(`🚀 Server running on http://localhost:${PORT}`)
+    );
+  })
+  .catch((err) => console.error('❌ MongoDB Connection Error:', err.message));
