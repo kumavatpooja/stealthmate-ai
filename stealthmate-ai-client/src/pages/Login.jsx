@@ -40,7 +40,7 @@ const Login = () => {
       });
 
       if (res.data?.token) {
-        success("✅ Logged in successfully");
+        success(" Logged in successfully");
         await login(res.data.token); // ensure context updates
         setOtp("");
         navigate("/dashboard");
