@@ -1,4 +1,3 @@
-// src/pages/Login.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -50,7 +49,7 @@ const Login = () => {
   };
 
   // ---------------- GOOGLE LOGIN ----------------
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = () => {
     try {
       const google = window.google;
       if (!google) {
@@ -58,15 +57,15 @@ const Login = () => {
         return;
       }
 
-      // Use Google Identity Services ONE TAP / popup login
       google.accounts.id.initialize({
         client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
         callback: async (response) => {
           try {
-            // ✅ Send ID token to backend
+            // ✅ Send Google ID token to backend
             const res = await api.post("/auth/login/google-token", {
               token: response.credential,
             });
+
             if (res.data?.token) {
               const loggedInUser = await login(res.data.token);
               success("Logged in with Google");
@@ -74,14 +73,16 @@ const Login = () => {
               if (loggedInUser?.role === "admin")
                 navigate("/admin-dashboard");
               else navigate("/dashboard");
+            } else {
+              error("Google login failed");
             }
           } catch (err) {
-            error("Google login failed");
+            error(err.response?.data?.message || "Google login failed");
           }
         },
       });
 
-      // Trigger Google popup
+      // ✅ Open Google login popup (instead of multiple parallel requests)
       google.accounts.id.prompt();
     } catch (err) {
       error("Google login failed to start");
