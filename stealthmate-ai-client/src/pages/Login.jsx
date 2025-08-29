@@ -1,5 +1,5 @@
-  // src/pages/Login.jsx
-import React, { useState } from "react";
+// src/pages/Login.jsx
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import useAuth from "../hooks/useAuth";
@@ -19,6 +19,7 @@ const Login = () => {
   const navigate = useNavigate();
   const { success, error } = useToast();
 
+  // ---------------- OTP LOGIN ----------------
   const handleSendOtp = async () => {
     try {
       await api.post("/auth/login/email", { email: email.trim() });
@@ -48,10 +49,30 @@ const Login = () => {
     }
   };
 
+  // ---------------- GOOGLE LOGIN ----------------
   const handleGoogleLogin = () => {
-    // Open Google login in a new tab to force chooser
     window.open(`${import.meta.env.VITE_BACKEND_URL}/api/auth/google`, "_self");
   };
+
+  // Catch token if backend redirects with it
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    if (token) {
+      (async () => {
+        try {
+          const loggedInUser = await login(token);
+          success("Logged in with Google");
+
+          if (loggedInUser?.role === "admin") navigate("/admin-dashboard");
+          else navigate("/dashboard");
+        } catch (err) {
+          error("Google login failed");
+        }
+      })();
+    }
+  }, [login, navigate, success, error]);
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#f5f0fa" }}>
@@ -62,17 +83,29 @@ const Login = () => {
       >
         {/* Left Image */}
         <div className="w-1/2 h-full hidden md:flex flex-col justify-center items-center bg-[#9b2c77] p-8 text-white">
-          <img src={LoginCard} alt="Visual" className="w-full h-full object-cover rounded-l-2xl brightness-110 contrast-125" />
+          <img
+            src={LoginCard}
+            alt="Visual"
+            className="w-full h-full object-cover rounded-l-2xl brightness-110 contrast-125"
+          />
         </div>
 
         {/* Right Form */}
         <div className="w-full md:w-1/2 p-10 flex flex-col justify-center bg-white">
           <div className="text-center mb-6">
             <img src={userIcon} alt="User" className="w-12 h-12 mx-auto" />
-            <h2 className="text-2xl font-bold mt-2">Login to <span className="text-pink-500">StealthMate</span></h2>
+            <h2 className="text-2xl font-bold mt-2">
+              Login to <span className="text-pink-500">StealthMate</span>
+            </h2>
             <p className="text-sm mt-1 text-gray-500">
               Don’t have an account?{" "}
-              <button type="button" onClick={() => navigate("/register")} className="text-pink-500 hover:underline">Register</button>
+              <button
+                type="button"
+                onClick={() => navigate("/register")}
+                className="text-pink-500 hover:underline"
+              >
+                Register
+              </button>
             </p>
           </div>
 
