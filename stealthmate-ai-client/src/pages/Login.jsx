@@ -1,5 +1,5 @@
 // src/pages/Login.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import useAuth from "../hooks/useAuth";
@@ -50,32 +50,49 @@ const Login = () => {
   };
 
   // ---------------- GOOGLE LOGIN ----------------
-  const handleGoogleLogin = () => {
-    window.open(`${import.meta.env.VITE_BACKEND_URL}/api/auth/google`, "_self");
+  const handleGoogleLogin = async () => {
+    try {
+      const google = window.google;
+      if (!google) {
+        error("Google SDK not loaded");
+        return;
+      }
+
+      // Use Google Identity Services ONE TAP / popup login
+      google.accounts.id.initialize({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        callback: async (response) => {
+          try {
+            // ✅ Send ID token to backend
+            const res = await api.post("/auth/login/google-token", {
+              token: response.credential,
+            });
+            if (res.data?.token) {
+              const loggedInUser = await login(res.data.token);
+              success("Logged in with Google");
+
+              if (loggedInUser?.role === "admin")
+                navigate("/admin-dashboard");
+              else navigate("/dashboard");
+            }
+          } catch (err) {
+            error("Google login failed");
+          }
+        },
+      });
+
+      // Trigger Google popup
+      google.accounts.id.prompt();
+    } catch (err) {
+      error("Google login failed to start");
+    }
   };
 
-  // Catch token if backend redirects with it
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-
-    if (token) {
-      (async () => {
-        try {
-          const loggedInUser = await login(token);
-          success("Logged in with Google");
-
-          if (loggedInUser?.role === "admin") navigate("/admin-dashboard");
-          else navigate("/dashboard");
-        } catch (err) {
-          error("Google login failed");
-        }
-      })();
-    }
-  }, [login, navigate, success, error]);
-
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#f5f0fa" }}>
+    <div
+      className="min-h-screen flex items-center justify-center"
+      style={{ backgroundColor: "#f5f0fa" }}
+    >
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -135,7 +152,9 @@ const Login = () => {
               {showOtpField ? "Verify OTP" : "Send OTP"}
             </button>
 
-            <div className="text-center text-sm text-gray-500">or continue with</div>
+            <div className="text-center text-sm text-gray-500">
+              or continue with
+            </div>
 
             <button
               onClick={handleGoogleLogin}
