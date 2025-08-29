@@ -38,25 +38,25 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
 
-// ✅ Robust CORS Setup
-const frontendUrl = process.env.FRONTEND_URL || 'https://stealthmate-ai.netlify.app';
+// ✅ CORS Setup (FIXED)
 const allowedOrigins = [
-  'http://localhost:5173', // local dev
-  frontendUrl, // live frontend
+  "http://localhost:5173", // local dev
+  "https://stealthmate-ai.netlify.app", // main Netlify site
+  "https://68b17894e66a23268249e7bf--stealthmate-ai.netlify.app", // Netlify preview/deploys
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // allow tools like Postman
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      return callback(new Error('CORS not allowed from this origin: ' + origin));
+      return callback(new Error("CORS not allowed from this origin: " + origin));
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
@@ -74,7 +74,7 @@ app.use(
       collectionName: 'sessions',
     }),
     cookie: {
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production', // HTTPS only in prod
       httpOnly: true,
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 1000 * 60 * 60, // 1 hour
