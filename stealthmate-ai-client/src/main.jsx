@@ -6,18 +6,18 @@ import "./index.css";
 
 import { BrowserRouter } from "react-router-dom";
 import { GoogleOAuthProvider } from "@react-oauth/google";
-import { AuthProvider } from "./context/AuthContext"; // Update path if needed
+import { AuthProvider } from "./context/AuthContext";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 
 root.render(
   <React.StrictMode>
     <GoogleOAuthProvider clientId="1018097117930-4kbuic8thvp3lhphevn8cc5u90selsvl.apps.googleusercontent.com">
-      <AuthProvider>
-        <BrowserRouter>
+      <BrowserRouter>
+        <AuthProvider>
           <App />
-        </BrowserRouter>
-      </AuthProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </GoogleOAuthProvider>
   </React.StrictMode>
 );

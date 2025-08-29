@@ -1,21 +1,24 @@
 // utils/jwtUtils.js
-
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-const generateToken = (user) => {
+const generateToken = async (userId) => {
+  const freshUser = await User.findById(userId);
+  if (!freshUser) throw new Error("User not found for token generation");
+
   const token = jwt.sign(
     {
-      name: user.name,              // ✅ Add full name
-      email: user.email,
-      role: user.role || "user",    // ✅ Optional role
-      userId: user._id              // ✅ Always add userId
+      name: freshUser.name,
+      email: freshUser.email,
+      role: freshUser.role || "user",
+      userId: freshUser._id
     },
     process.env.JWT_SECRET,
     { expiresIn: '24h' }
   );
 
-  user.lastToken = token;
-  user.save();
+  freshUser.lastToken = token;
+  await freshUser.save();
 
   return token;
 };

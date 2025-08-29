@@ -1,8 +1,9 @@
+// src/pages/Register.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useToast } from "../hooks/useToast";
-import api from "../utils/axios"; // ✅ Use axios instance
+import api from "../utils/axios";
 
 import LoginCard from "../assets/logincard.png";
 import userIcon from "../assets/user.png";
@@ -15,31 +16,28 @@ const Register = () => {
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
-    e.preventDefault(); // ✅ Prevent form reload
+    e.preventDefault();
     try {
       await api.post("/auth/register", { name, email });
       success("🎉 Registered successfully! Please log in");
-      navigate("/login"); // ✅ Smooth SPA navigation
+      navigate("/login");
     } catch (err) {
       error(err.response?.data?.message || "Registration failed");
     }
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_BACKEND_URL}/api/auth/google`; // ✅ Dynamic URL
+    window.open(`${import.meta.env.VITE_BACKEND_URL}/api/auth/google`, "_self");
   };
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center"
-      style={{ backgroundColor: "#f5f0fa" }}
-    >
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#f5f0fa" }}>
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="w-[1000px] h-[600px] max-w-full bg-white rounded-2xl shadow-xl flex overflow-hidden"
       >
-        {/* Left image */}
+        {/* Left side image */}
         <div className="w-1/2 h-full hidden md:flex flex-col justify-center items-center bg-[#9b2c77] p-8 text-white">
           <img
             src={LoginCard}
@@ -48,7 +46,7 @@ const Register = () => {
           />
         </div>
 
-        {/* Right form */}
+        {/* Right side form */}
         <div className="w-full md:w-1/2 p-10 flex flex-col justify-center bg-white">
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="text-center mb-6">
@@ -76,7 +74,6 @@ const Register = () => {
               required
               className="w-full p-3 rounded-full border border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-400"
             />
-
             <input
               type="email"
               placeholder="Email Address"
@@ -93,17 +90,16 @@ const Register = () => {
               Create Account
             </button>
 
-            <div className="text-center text-sm text-gray-500">
-              or continue with
-            </div>
+            <div className="text-center text-sm text-gray-500">or continue with</div>
 
+            {/* Google Login Button */}
             <button
               type="button"
               onClick={handleGoogleLogin}
-              className="w-full py-3 rounded-full border border-gray-300 flex items-center justify-center gap-3 text-gray-700 hover:bg-gray-100"
+              className="w-full py-3 rounded-full border border-gray-300 flex items-center justify-center gap-3 hover:bg-gray-100 transition"
             >
-              <img src={GoogleIcon} alt="Google" className="w-5 h-5" />
-              Continue with Google
+              <img src={GoogleIcon} alt="Google" className="w-6 h-6" />
+              <span>Continue with Google</span>
             </button>
           </form>
         </div>

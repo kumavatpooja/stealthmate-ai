@@ -13,9 +13,13 @@ import Admin from "./pages/Admin";
 import PrivateRoute from "./routes/PrivateRoute";
 
 import { useAuthContext } from "./context/AuthContext";
+import useAuthSync from "./hooks/useAuthSync"; // ✅ added
+
+import AdminDashboard from "./pages/AdminDashboard";
 
 const App = () => {
   const { user } = useAuthContext();
+  useAuthSync(); // ✅ added
 
   return (
     <>
@@ -25,8 +29,10 @@ const App = () => {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
-     <Route path="/register" element={<Register key={window.location.pathname} />} />
-
+        <Route
+          path="/register"
+          element={<Register key={window.location.pathname} />}
+        />
         <Route path="/google-success" element={<GoogleSuccess />} />
 
         <Route
@@ -49,8 +55,9 @@ const App = () => {
           }
         />
 
-        {/* 🔁 Catch-all fallback route */}
         <Route path="*" element={<Navigate to="/" replace />} />
+     
+        <Route path="/admin" element={<AdminDashboard />} />
       </Routes>
     </>
   );

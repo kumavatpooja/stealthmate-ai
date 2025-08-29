@@ -26,6 +26,8 @@ const ocrToAiRoutes = require('./routes/ocrToAI');
 const liveInterviewRoutes = require('./routes/liveInterviewRoutes');
 const supportRoutes = require('./routes/supportRoutes');
 const liveInterviewSpeechRoutes = require('./routes/liveInterviewSpeechRoutes');
+const userRoutes = require("./routes/userRoutes");
+
 
 // ⚙️ App Setup
 const app = express();
@@ -62,6 +64,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+
 // 🛡️ Session Management
 app.use(
   session({
@@ -93,6 +96,7 @@ app.use('/api/ocr', ocrToAiRoutes);
 app.use('/api/live', liveInterviewRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/live', liveInterviewSpeechRoutes);
+app.use("/api/user", userRoutes);
 
 // 🩺 Health Check
 app.get('/api/test/ping', (req, res) => {

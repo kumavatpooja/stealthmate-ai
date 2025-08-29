@@ -1,91 +1,97 @@
-// src/context/AuthContext.jsx
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import api from "../utils/axios";
 
-// Minimal JWT payload parser (no external dependency required for decoding base64)
-function parseJwt(token) {
-  try {
-    const base64Payload = token.split(".")[1];
-    const payload = atob(base64Payload.replace(/-/g, "+").replace(/_/g, "/"));
-    return JSON.parse(decodeURIComponent(escape(payload)));
-  } catch (e) {
-    console.warn("Failed to parse JWT:", e);
-    return null;
-  }
-}
-
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
+  const navigate = useNavigate();
+  const redirectedRef = useRef(false); // ✅ prevent double redirects
 
-  useEffect(() => {
-    const storedToken = localStorage.getItem("token");
-    const storedUser = localStorage.getItem("user");
+  // ----------------- VALIDATE USER -----------------
+  const validateUser = async (t) => {
+    try {
+      const { data } = await api.get("/auth/me", {
+        headers: { Authorization: `Bearer ${t}` },
+      });
 
-    if (storedToken) {
-      setToken(storedToken);
+      const uo = {
+        _id: data._id,
+        name: data.name,
+        email: data.email,
+        role: data.role || "user", // ✅ always provide role
+      };
+
+      setUser(uo);
+      localStorage.setItem("user", JSON.stringify(uo));
+      return uo;
+    } catch (err) {
+      console.error("❌ Auth validate failed:", err.response?.data || err.message);
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      setToken(null);
+      setUser(null);
+      return null;
     }
-
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch {
-        localStorage.removeItem("user");
-      }
-    } else if (storedToken) {
-      const decoded = parseJwt(storedToken);
-      if (decoded) {
-        const userObj = {
-          name: decoded.name,
-          email: decoded.email,
-          role: decoded.role,
-          userId: decoded.userId || decoded.userID || decoded.sub,
-        };
-        setUser(userObj);
-        localStorage.setItem("user", JSON.stringify(userObj));
-      }
-    }
-  }, []);
-
-  const login = (jwtToken) => {
-    return new Promise((resolve) => {
-      const decoded = parseJwt(jwtToken);
-      const userObj = decoded
-        ? {
-            name: decoded.name,
-            email: decoded.email,
-            role: decoded.role,
-            userId: decoded.userId || decoded.userID || decoded.sub,
-          }
-        : null;
-
-      setToken(jwtToken);
-      localStorage.setItem("token", jwtToken);
-
-      if (userObj) {
-        setUser(userObj);
-        localStorage.setItem("user", JSON.stringify(userObj));
-      }
-
-      setTimeout(() => {
-        resolve(userObj);
-      }, 0);
-    });
   };
 
+  // ----------------- REFRESH ON PAGE RELOAD -----------------
+  useEffect(() => {
+    const t = localStorage.getItem("token");
+    if (!t) return;
+
+    setToken(t);
+
+    const refreshUser = async () => {
+      const uo = await validateUser(t);
+
+      if (!redirectedRef.current && uo) {
+        redirectedRef.current = true;
+        if (uo.role === "admin") {
+          navigate("/admin", { replace: true });
+        } else {
+          navigate("/dashboard", { replace: true });
+        }
+      }
+    };
+
+    refreshUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ----------------- LOGIN HANDLER -----------------
+  const login = async (jwtToken) => {
+    setToken(jwtToken);
+    localStorage.setItem("token", jwtToken);
+
+    const uo = await validateUser(jwtToken);
+
+    if (uo) {
+      // ✅ redirect always based on role
+      if (uo.role === "admin") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
+    }
+  };
+
+  // ----------------- LOGOUT -----------------
   const logout = () => {
     setUser(null);
     setToken(null);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    navigate("/login", { replace: true });
   };
 
-  return (
-    <AuthContext.Provider value={{ user, token, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  // ----------------- CONTEXT VALUE -----------------
+  const value = useMemo(() => ({ user, token, login, logout }), [user, token]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuthContext = () => useContext(AuthContext);
+export default AuthContext;
