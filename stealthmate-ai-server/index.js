@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const passport = require('passport');
 const session = require('express-session');
+const MongoStore = require('connect-mongo');
 const cron = require('node-cron');
 const morgan = require('morgan');
 require('dotenv').config();
@@ -28,7 +29,6 @@ const supportRoutes = require('./routes/supportRoutes');
 const liveInterviewSpeechRoutes = require('./routes/liveInterviewSpeechRoutes');
 const userRoutes = require("./routes/userRoutes");
 
-
 // ⚙️ App Setup
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -48,7 +48,6 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      // allow requests with no origin (e.g., curl, mobile apps, or same-origin)
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
@@ -64,17 +63,21 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-
-// 🛡️ Session Management
+// 🛡️ Session Management (production-ready with MongoDB)
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'your-default-secret',
     resave: false,
     saveUninitialized: false,
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGO_URI,
+      collectionName: 'sessions',
+    }),
     cookie: {
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 1000 * 60 * 60, // 1 hour
     },
   })
 );
