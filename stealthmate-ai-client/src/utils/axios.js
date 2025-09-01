@@ -6,7 +6,7 @@ const instance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // if you're using cookies
+  // ❌ Removed withCredentials for JWT token-based login
 });
 
 export default instance;

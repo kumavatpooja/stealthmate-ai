@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import useAuth from "../hooks/useAuth";
@@ -9,43 +9,53 @@ import LoginCard from "../assets/logincard.png";
 import userIcon from "../assets/user.png";
 import GoogleIcon from "../assets/googleicon.jpg";
 
+const OTP_LENGTH = 6;
+
 const Login = () => {
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
+  const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(""));
   const [showOtpField, setShowOtpField] = useState(false);
-  const [timer, setTimer] = useState(0); // countdown timer
-  const { login, user } = useAuth();
+  const [timer, setTimer] = useState(0);
+  const [sendingOtp, setSendingOtp] = useState(false); // Prevent multiple requests
+  const { login } = useAuth();
   const navigate = useNavigate();
   const { success, error } = useToast();
+  const inputRefs = useRef([]);
 
-  // ---------------- OTP LOGIN ----------------
+  // ---------------- SEND OTP ----------------
   const handleSendOtp = async () => {
+    if (sendingOtp) return;
+    setSendingOtp(true);
     try {
       await api.post("/auth/login/email", { email: email.trim() });
       success("📩 OTP sent to your email");
       setShowOtpField(true);
-      setTimer(20); // start 20 sec countdown
+      setTimer(30);
+      setOtp(Array(OTP_LENGTH).fill(""));
+      inputRefs.current[0]?.focus();
     } catch (err) {
       error(err.response?.data?.message || "Failed to send OTP");
+    } finally {
+      setSendingOtp(false);
     }
   };
 
+  // ---------------- VERIFY OTP ----------------
   const handleVerifyOtp = async () => {
+    const otpValue = otp.join("");
     try {
-      const res = await api.post("/auth/login/verify", { email, otp });
+      const res = await api.post("/auth/login/verify", { email, otp: otpValue });
       if (res.data?.token) {
         const loggedInUser = await login(res.data.token);
-        success("✅ Logged in successfully");
-        setOtp("");
-        navigate(
-          loggedInUser?.role === "admin" ? "/admin-dashboard" : "/dashboard"
-        );
+        success(" Logged in successfully");
+        setOtp(Array(OTP_LENGTH).fill(""));
+        navigate(loggedInUser?.role === "admin" ? "/admin-dashboard" : "/dashboard");
       } else {
         error("❌ Invalid OTP");
       }
     } catch (err) {
       error(err.response?.data?.message || "❌ Invalid OTP");
-      setOtp("");
+      setOtp(Array(OTP_LENGTH).fill(""));
     }
   };
 
@@ -56,7 +66,7 @@ const Login = () => {
     return () => clearInterval(interval);
   }, [timer]);
 
-  // ---------------- GOOGLE POPUP LOGIN (CLASSIC) ----------------
+  // ---------------- GOOGLE LOGIN ----------------
   const handleGoogleLogin = async () => {
     try {
       const google = window.google;
@@ -73,20 +83,11 @@ const Login = () => {
         callback: async (response) => {
           const code = response.code;
           try {
-            const { data } = await api.post(
-              "/auth/login/google-token",
-              { token: code },
-              { withCredentials: true }
-            );
-
+            const { data } = await api.post("/auth/login/google-token", { token: code });
             if (data?.token) {
               await login(data.token);
-              success("✅ Logged in with Google");
-              navigate(
-                data.user?.role === "admin"
-                  ? "/admin-dashboard"
-                  : "/dashboard"
-              );
+              success(" Logged in with Google");
+              navigate(data.user?.role === "admin" ? "/admin-dashboard" : "/dashboard");
             } else {
               error(data?.message || "❌ Google login failed");
             }
@@ -103,23 +104,48 @@ const Login = () => {
     }
   };
 
+  // ---------------- OTP INPUT CHANGE ----------------
+  const handleOtpChange = (e, idx) => {
+    const val = e.target.value.replace(/\D/, "");
+    if (!val) return;
+    const newOtp = [...otp];
+    newOtp[idx] = val;
+    setOtp(newOtp);
+
+    if (idx < OTP_LENGTH - 1) {
+      inputRefs.current[idx + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (e, idx) => {
+    if (e.key === "Backspace" && !otp[idx] && idx > 0) {
+      inputRefs.current[idx - 1]?.focus();
+    }
+  };
+
   return (
-    <div
-      className="min-h-screen flex items-center justify-center"
-      style={{ backgroundColor: "#f5f0fa" }}
-    >
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#f5f0fa" }}>
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
+        whileHover={{ scale: 1.03 }} // Hover movement
+        initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="w-[1000px] h-[600px] max-w-full bg-white rounded-2xl shadow-xl flex overflow-hidden"
+        className="w-[1200px] max-w-full h-[600px] bg-white rounded-2xl shadow-xl flex overflow-hidden transition-transform duration-500"
       >
-        {/* Left Image */}
-        <div className="w-1/2 h-full hidden md:flex flex-col justify-center items-center bg-[#9b2c77] p-8 text-white">
+        {/* Left Image with welcome text */}
+        <div className="w-1/2 h-full hidden md:flex flex-col justify-center items-center relative">
           <img
             src={LoginCard}
             alt="Visual"
-            className="w-full h-full object-cover rounded-l-2xl brightness-110 contrast-125"
+            className="w-full h-full object-cover rounded-l-2xl brightness-105 contrast-100"
           />
+          <div className="absolute inset-0 flex flex-col justify-center items-center text-center px-6">
+            <h2 className="text-white text-4xl font-bold drop-shadow-lg">
+              Welcome Back!
+            </h2>
+            <p className="text-white mt-3 text-lg drop-shadow-md">
+              Log in to access your StealthMate account
+            </p>
+          </div>
         </div>
 
         {/* Right Form */}
@@ -131,11 +157,7 @@ const Login = () => {
             </h2>
             <p className="text-sm mt-1 text-gray-500">
               Don’t have an account?{" "}
-              <button
-                type="button"
-                onClick={() => navigate("/register")}
-                className="text-pink-500 hover:underline"
-              >
+              <button type="button" onClick={() => navigate("/register")} className="text-pink-500 hover:underline">
                 Register
               </button>
             </p>
@@ -152,54 +174,57 @@ const Login = () => {
 
             {showOtpField && (
               <>
-                <input
-                  type="text"
-                  placeholder="Enter OTP"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  className="w-full p-3 rounded-full border border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-400"
-                />
-                <button
-                  onClick={handleSendOtp}
-                  disabled={timer > 0}
-                  className={`w-full py-2 rounded-full font-semibold transition ${
-                    timer > 0
-                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      : "bg-pink-500 text-white hover:bg-pink-600"
-                  }`}
-                >
-                  {timer > 0 ? `Resend OTP in ${timer}s` : "Resend OTP"}
-                </button>
+                <div className="flex justify-between space-x-2">
+                  {otp.map((val, idx) => (
+                    <input
+                      key={idx}
+                      type="text"
+                      maxLength="1"
+                      value={val}
+                      ref={(el) => (inputRefs.current[idx] = el)}
+                      onChange={(e) => handleOtpChange(e, idx)}
+                      onKeyDown={(e) => handleOtpKeyDown(e, idx)}
+                      className="w-12 h-12 text-center text-lg font-bold rounded-lg border border-purple-300 focus:ring-2 focus:ring-purple-400 focus:outline-none"
+                      style={{ backgroundColor: "#F3E8FF" }}
+                    />
+                  ))}
+                </div>
+                <div className="text-right text-sm mt-1">
+                  {timer > 0 ? (
+                    <span className="text-gray-400">Resend OTP in {timer}s</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      disabled={sendingOtp}
+                      className={`text-purple-500 hover:text-purple-700 underline text-sm font-medium bg-transparent p-0 border-0 cursor-pointer ${sendingOtp ? "opacity-50 cursor-not-allowed" : ""}`}
+                    >
+                      {sendingOtp ? "Sending..." : "Resend OTP"}
+                    </button>
+                  )}
+                </div>
               </>
             )}
 
             <button
               onClick={showOtpField ? handleVerifyOtp : handleSendOtp}
-              className="w-full py-3 bg-pink-500 text-white rounded-full font-semibold hover:bg-pink-600 transition"
+              disabled={sendingOtp}
+              className={`w-full py-3 rounded-full font-semibold text-white transition
+                bg-pink-500 hover:bg-pink-600 ${sendingOtp ? "opacity-50 cursor-not-allowed" : ""}`}
             >
-              {showOtpField ? "Verify OTP" : "Send OTP"}
+              {sendingOtp ? "Sending..." : showOtpField ? "Verify OTP" : "Send OTP"}
             </button>
 
-            <div className="text-center text-sm text-gray-500">
-              or continue with
-            </div>
+            <div className="text-center text-sm text-gray-500">or continue with</div>
 
-            <button
+            {/* Google login */}
+            <div
               onClick={handleGoogleLogin}
-              className="w-full py-3 rounded-full border border-gray-300 flex items-center justify-center gap-3 text-gray-700 hover:bg-gray-100"
+              className="w-full flex items-center justify-center gap-3 cursor-pointer transition hover:text-pink-500"
             >
-              <img src={GoogleIcon} alt="Google" className="w-5 h-5" />
-              Continue with Google
-            </button>
-
-            {user?.role === "admin" && (
-              <button
-                onClick={() => navigate("/admin-dashboard")}
-                className="w-full py-3 mt-2 bg-yellow-500 text-white rounded-full font-semibold hover:bg-yellow-600 transition"
-              >
-                Admin Dashboard
-              </button>
-            )}
+              <img src={GoogleIcon} alt="Google" className="w-8 h-8" />
+              <span className="text-lg font-semibold">Continue with Google</span>
+            </div>
           </div>
         </div>
       </motion.div>

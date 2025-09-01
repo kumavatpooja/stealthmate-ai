@@ -1,20 +1,22 @@
-// src/pages/Register.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useToast } from "../hooks/useToast";
+import useAuth from "../hooks/useAuth";
 import api from "../utils/axios";
 
 import LoginCard from "../assets/logincard.png";
 import userIcon from "../assets/user.png";
-import GoogleIcon from "../assets/googleicon.jpg";
+import GoogleIcon from "../assets/googleicon.png";
 
 const Register = () => {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const { success, error } = useToast();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
+  // ---------------- REGISTER ----------------
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
@@ -26,24 +28,67 @@ const Register = () => {
     }
   };
 
-  const handleGoogleLogin = () => {
-    window.open(`${import.meta.env.VITE_BACKEND_URL}/api/auth/google`, "_self");
+  // ---------------- GOOGLE POPUP LOGIN ----------------
+  const handleGoogleLogin = async () => {
+    try {
+      const google = window.google;
+      if (!google) {
+        error("Google SDK not loaded");
+        return;
+      }
+
+      const client = google.accounts.oauth2.initCodeClient({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        scope: "openid email profile",
+        ux_mode: "popup",
+        prompt: "select_account",
+        callback: async (response) => {
+          const code = response.code;
+          try {
+            const { data } = await api.post("/auth/login/google-token", { token: code });
+            if (data?.token) {
+              await login(data.token);
+              success("✅ Logged in with Google");
+              navigate(data.user?.role === "admin" ? "/admin-dashboard" : "/dashboard");
+            } else {
+              error(data?.message || "❌ Google login failed");
+            }
+          } catch (err) {
+            error(err.response?.data?.message || "❌ Google login failed");
+          }
+        },
+      });
+
+      client.requestCode();
+    } catch (err) {
+      console.error("Google popup error:", err);
+      error("❌ Google login failed to start");
+    }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#f5f0fa" }}>
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
+        whileHover={{ scale: 1.03 }} // Hover movement
+        initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="w-[1000px] h-[600px] max-w-full bg-white rounded-2xl shadow-xl flex overflow-hidden"
+        className="w-[1200px] max-w-full h-[600px] bg-white rounded-2xl shadow-xl flex overflow-hidden transition-transform duration-500"
       >
         {/* Left side image */}
-        <div className="w-1/2 h-full hidden md:flex flex-col justify-center items-center bg-[#9b2c77] p-8 text-white">
+        <div className="w-1/2 h-full hidden md:flex flex-col justify-center items-center relative">
           <img
             src={LoginCard}
             alt="Visual"
-            className="w-full h-full object-cover rounded-l-2xl brightness-110 contrast-125"
+            className="w-full h-full object-cover rounded-l-2xl brightness-105 contrast-100"
           />
+          <div className="absolute inset-0 flex flex-col justify-center items-center text-center px-6">
+            <h2 className="text-white text-4xl font-bold drop-shadow-lg">
+              Welcome to StealthMate
+            </h2>
+            <p className="text-white mt-3 text-lg drop-shadow-md">
+              Your personal interview assistant
+            </p>
+          </div>
         </div>
 
         {/* Right side form */}
@@ -92,15 +137,13 @@ const Register = () => {
 
             <div className="text-center text-sm text-gray-500">or continue with</div>
 
-            {/* Google Login Button */}
-            <button
-              type="button"
+            <div
               onClick={handleGoogleLogin}
-              className="w-full py-3 rounded-full border border-gray-300 flex items-center justify-center gap-3 hover:bg-gray-100 transition"
+              className="w-full flex items-center justify-center gap-3 cursor-pointer transition hover:text-pink-500"
             >
-              <img src={GoogleIcon} alt="Google" className="w-6 h-6" />
-              <span>Continue with Google</span>
-            </button>
+              <img src={GoogleIcon} alt="Google" className="w-8 h-8" />
+              <span className="text-lg font-semibold">Continue with Google</span>
+            </div>
           </form>
         </div>
       </motion.div>
