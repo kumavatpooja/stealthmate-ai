@@ -1,3 +1,6 @@
+
+//stealthmate-ai-client\src\routes\PrivateRoute.jsx
+
 import { Navigate } from "react-router-dom";
 import { useAuthContext } from "../context/AuthContext";
 

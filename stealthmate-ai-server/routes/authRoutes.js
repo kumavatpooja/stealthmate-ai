@@ -7,20 +7,22 @@ const { sendOTP } = require("../utils/emailUtils");
 const { generateToken } = require("../utils/jwtUtils");
 const authMiddleware = require("../middleware/authMiddleware");
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+// Google OAuth2 Client
+const client = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET
+);
 
 // ----------------- REGISTER -----------------
 router.post("/register", async (req, res) => {
   try {
     const { name, email } = req.body;
-    if (!name || !email) {
+    if (!name || !email)
       return res.status(400).json({ message: "Name and email are required" });
-    }
 
     const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    if (existingUser)
       return res.status(409).json({ message: "User already exists" });
-    }
 
     const newUser = new User({
       name,
@@ -52,9 +54,7 @@ router.post("/login/email", async (req, res) => {
 
   try {
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not registered. Please register first." });
-    }
+    if (!user) return res.status(404).json({ message: "User not registered. Please register first." });
 
     user.otp = otp;
     await user.save();
@@ -74,21 +74,15 @@ router.post("/login/verify", async (req, res) => {
   const { email, otp } = req.body;
   try {
     const user = await User.findOne({ email });
-    if (!user || user.otp !== otp) {
-      return res.status(401).json({ message: "Invalid OTP" });
-    }
+    if (!user || user.otp !== otp) return res.status(401).json({ message: "Invalid OTP" });
 
     user.isVerified = true;
     user.otp = null;
-
-    if (email === "poojakumavat232@gmail.com") {
-      user.role = "admin";
-    }
-
+    if (email === "poojakumavat232@gmail.com") user.role = "admin";
     await user.save();
 
     const token = await generateToken(user._id);
-    user.lastToken = token; // ✅ save lastToken for cross-device logout
+    user.lastToken = token;
     await user.save();
 
     res.json({
@@ -101,13 +95,20 @@ router.post("/login/verify", async (req, res) => {
   }
 });
 
-// ----------------- GOOGLE LOGIN (ID TOKEN) -----------------
+// ----------------- GOOGLE LOGIN (classic popup) -----------------
 router.post("/login/google-token", async (req, res) => {
-  const { token: googleToken } = req.body;
+  const { token: code } = req.body; // auth code from frontend
 
   try {
+    // Exchange auth code for tokens
+    const { tokens } = await client.getToken({
+      code,
+      redirect_uri: "postmessage", // required for popup flow
+    });
+
+    // Verify ID token
     const ticket = await client.verifyIdToken({
-      idToken: googleToken,
+      idToken: tokens.id_token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
@@ -127,15 +128,13 @@ router.post("/login/google-token", async (req, res) => {
         plan: { name: "Free", dailyLimit: 3, usedToday: 0, expiresAt: null },
       });
       await user.save();
-    } else {
-      if (email === "poojakumavat232@gmail.com" && user.role !== "admin") {
-        user.role = "admin";
-        await user.save();
-      }
+    } else if (email === "poojakumavat232@gmail.com" && user.role !== "admin") {
+      user.role = "admin";
+      await user.save();
     }
 
     const token = await generateToken(user._id);
-    user.lastToken = token; // ✅ save lastToken
+    user.lastToken = token;
     await user.save();
 
     res.json({
@@ -144,7 +143,7 @@ router.post("/login/google-token", async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Google Token Error:", error.message);
-    res.status(401).json({ message: "Invalid Google token" });
+    res.status(401).json({ message: "Invalid Google token/code" });
   }
 });
 

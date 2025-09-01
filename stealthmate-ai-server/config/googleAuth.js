@@ -1,6 +1,7 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/User');
+const { generateToken } = require('../utils/jwtUtils'); // add your JWT utils
 
 const callbackURL =
   process.env.NODE_ENV === 'production'
@@ -14,6 +15,7 @@ passport.use(
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL,
+      prompt: 'select_account', // always show chooser
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -31,17 +33,28 @@ passport.use(
             plan: { name: 'Free', dailyLimit: 3, usedToday: 0, expiresAt: null },
           });
           await user.save();
+        } else if (email === 'poojakumavat232@gmail.com' && user.role !== 'admin') {
+          user.role = 'admin';
+          await user.save();
         }
 
-        return done(null, user);
+        // Generate JWT token
+        const token = await generateToken(user._id);
+        user.lastToken = token;
+        await user.save();
+
+        // Attach token to user object for callback route
+        return done(null, { user, token });
       } catch (err) {
+        console.error('❌ Google Strategy Error:', err.message);
         return done(err, null);
       }
     }
   )
 );
 
-passport.serializeUser((user, done) => done(null, user.id));
+// These are still required, even if you don't use sessions
+passport.serializeUser((data, done) => done(null, data.user.id));
 passport.deserializeUser(async (id, done) => {
   try {
     const user = await User.findById(id);
@@ -50,3 +63,5 @@ passport.deserializeUser(async (id, done) => {
     done(err, null);
   }
 });
+
+module.exports = passport;

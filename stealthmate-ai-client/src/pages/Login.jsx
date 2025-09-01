@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import useAuth from "../hooks/useAuth";
@@ -13,7 +13,7 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [showOtpField, setShowOtpField] = useState(false);
-
+  const [timer, setTimer] = useState(0); // countdown timer
   const { login, user } = useAuth();
   const navigate = useNavigate();
   const { success, error } = useToast();
@@ -23,7 +23,8 @@ const Login = () => {
     try {
       await api.post("/auth/login/email", { email: email.trim() });
       success("📩 OTP sent to your email");
-      setTimeout(() => setShowOtpField(true), 600);
+      setShowOtpField(true);
+      setTimer(20); // start 20 sec countdown
     } catch (err) {
       error(err.response?.data?.message || "Failed to send OTP");
     }
@@ -34,11 +35,11 @@ const Login = () => {
       const res = await api.post("/auth/login/verify", { email, otp });
       if (res.data?.token) {
         const loggedInUser = await login(res.data.token);
-        success("Logged in successfully");
+        success("✅ Logged in successfully");
         setOtp("");
-
-        if (loggedInUser?.role === "admin") navigate("/admin-dashboard");
-        else navigate("/dashboard");
+        navigate(
+          loggedInUser?.role === "admin" ? "/admin-dashboard" : "/dashboard"
+        );
       } else {
         error("❌ Invalid OTP");
       }
@@ -48,8 +49,15 @@ const Login = () => {
     }
   };
 
-  // ---------------- GOOGLE LOGIN ----------------
-  const handleGoogleLogin = () => {
+  // ---------------- OTP TIMER ----------------
+  useEffect(() => {
+    if (timer === 0) return;
+    const interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
+    return () => clearInterval(interval);
+  }, [timer]);
+
+  // ---------------- GOOGLE POPUP LOGIN (CLASSIC) ----------------
+  const handleGoogleLogin = async () => {
     try {
       const google = window.google;
       if (!google) {
@@ -57,35 +65,41 @@ const Login = () => {
         return;
       }
 
-      google.accounts.id.initialize({
+      const client = google.accounts.oauth2.initCodeClient({
         client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        scope: "openid email profile",
+        ux_mode: "popup",
+        prompt: "select_account",
         callback: async (response) => {
+          const code = response.code;
           try {
-            // ✅ Send Google ID token to backend
-            const res = await api.post("/auth/login/google-token", {
-              token: response.credential,
-            });
+            const { data } = await api.post(
+              "/auth/login/google-token",
+              { token: code },
+              { withCredentials: true }
+            );
 
-            if (res.data?.token) {
-              const loggedInUser = await login(res.data.token);
-              success("Logged in with Google");
-
-              if (loggedInUser?.role === "admin")
-                navigate("/admin-dashboard");
-              else navigate("/dashboard");
+            if (data?.token) {
+              await login(data.token);
+              success("✅ Logged in with Google");
+              navigate(
+                data.user?.role === "admin"
+                  ? "/admin-dashboard"
+                  : "/dashboard"
+              );
             } else {
-              error("Google login failed");
+              error(data?.message || "❌ Google login failed");
             }
           } catch (err) {
-            error(err.response?.data?.message || "Google login failed");
+            error(err.response?.data?.message || "❌ Google login failed");
           }
         },
       });
 
-      // ✅ Open Google login popup (instead of multiple parallel requests)
-      google.accounts.id.prompt();
+      client.requestCode();
     } catch (err) {
-      error("Google login failed to start");
+      console.error("Google popup error:", err);
+      error("❌ Google login failed to start");
     }
   };
 
@@ -137,13 +151,26 @@ const Login = () => {
             />
 
             {showOtpField && (
-              <input
-                type="text"
-                placeholder="Enter OTP"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                className="w-full p-3 rounded-full border border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-400"
-              />
+              <>
+                <input
+                  type="text"
+                  placeholder="Enter OTP"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  className="w-full p-3 rounded-full border border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-400"
+                />
+                <button
+                  onClick={handleSendOtp}
+                  disabled={timer > 0}
+                  className={`w-full py-2 rounded-full font-semibold transition ${
+                    timer > 0
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-pink-500 text-white hover:bg-pink-600"
+                  }`}
+                >
+                  {timer > 0 ? `Resend OTP in ${timer}s` : "Resend OTP"}
+                </button>
+              </>
             )}
 
             <button
@@ -165,7 +192,6 @@ const Login = () => {
               Continue with Google
             </button>
 
-            {/* Admin Button */}
             {user?.role === "admin" && (
               <button
                 onClick={() => navigate("/admin-dashboard")}
