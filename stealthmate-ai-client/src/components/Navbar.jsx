@@ -16,14 +16,14 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="w-full sticky top-0 z-50 bg-gradient-to-r from-[#ec4899] via-fuchsia-600 to-[#9c48e1] shadow-md">
-      <div className="max-w-[1440px] mx-auto flex items-center justify-between px-4 sm:px-12 py-3 text-white">
+    <nav className="w-full sticky top-0 z-50 bg-gradient-to-r from-[#ec4899] via-fuchsia-600 to-[#9c48e1] shadow-lg">
+      <div className="max-w-[1600px] mx-auto flex items-center justify-between px-6 sm:px-16 py-4 text-white">
         {/* Logo + Title */}
-        <Link to="/" className="flex items-center gap-2">
-          <img src={robo} alt="logo" className="w-8 sm:w-11" />
+        <Link to="/" className="flex items-center gap-3">
+          <img src={robo} alt="logo" className="w-10 sm:w-12" />
           <motion.h1
-            whileHover={{ scale: 1.03 }}
-            className="text-lg sm:text-2xl font-bold tracking-tight"
+            whileHover={{ scale: 1.05 }}
+            className="text-xl sm:text-3xl font-extrabold tracking-tight drop-shadow-md"
           >
             StealthMate <span className="text-yellow-300">AI</span>
           </motion.h1>
@@ -34,7 +34,7 @@ const Navbar = () => {
           <button
             aria-label="menu"
             onClick={() => setOpen((o) => !o)}
-            className="p-2"
+            className="p-2 hover:bg-white/20 rounded-md transition"
           >
             {open ? <FiX className="w-6 h-6" /> : <FiMenu className="w-6 h-6" />}
           </button>
@@ -42,14 +42,14 @@ const Navbar = () => {
 
         {/* Links */}
         <div
-          className={`flex flex-col md:flex-row md:items-center gap-3 sm:gap-6 justify-end
-            w-full md:w-auto transition-all ${open ? "block" : "hidden"} md:flex`}
+          className={`flex flex-col md:flex-row md:items-center gap-4 sm:gap-8 justify-end
+            w-full md:w-auto transition-all duration-300 ${open ? "block" : "hidden"} md:flex`}
         >
-          {/* ✅ Admin Panel button visible only for admins */}
+          {/* Admin Panel button visible only for admins */}
           {user?.role === "admin" && (
             <Link
               to="/admin"
-              className="bg-white text-pink-600 font-medium px-4 py-1.5 sm:px-5 sm:py-2 rounded-lg hover:bg-pink-100 transition duration-200 shadow-sm"
+              className="bg-white text-pink-600 font-semibold px-5 py-2 rounded-xl hover:bg-pink-50 hover:text-pink-700 transition shadow-md"
               onClick={() => setOpen(false)}
             >
               Admin Panel
@@ -59,7 +59,7 @@ const Navbar = () => {
           {user && (
             <Link
               to="/dashboard"
-              className="text-sm sm:text-base font-medium hover:underline hover:text-yellow-200 transition"
+              className="text-base font-medium hover:text-yellow-200 hover:underline transition"
               onClick={() => setOpen(false)}
             >
               Dashboard
@@ -67,7 +67,7 @@ const Navbar = () => {
           )}
 
           {user?.name && (
-            <span className="font-medium text-sm">
+            <span className="font-medium text-base text-white/90">
               Welcome, {user.name.split(" ")[0]}
             </span>
           )}
@@ -78,22 +78,22 @@ const Navbar = () => {
                 handleLogout();
                 setOpen(false);
               }}
-              className="bg-pink-500 hover:bg-pink-600 text-white font-medium px-4 py-1.5 sm:px-5 sm:py-2 rounded-lg transition duration-200"
+              className="bg-pink-500 hover:bg-pink-600 text-white font-semibold px-5 py-2 rounded-xl shadow-lg transition transform hover:-translate-y-0.5"
             >
               Logout
             </button>
           ) : (
-            <div className="flex flex-col md:flex-row gap-2">
+            <div className="flex flex-col md:flex-row gap-3">
               <Link
                 to="/login"
-                className="bg-white text-pink-600 font-semibold px-4 py-1.5 rounded-lg hover:bg-pink-100 transition duration-200 shadow-sm"
+                className="bg-white text-pink-600 font-semibold px-5 py-2 rounded-xl hover:bg-pink-50 hover:text-pink-700 shadow-md transition transform hover:-translate-y-0.5"
                 onClick={() => setOpen(false)}
               >
                 Login
               </Link>
               <Link
                 to="/register"
-                className="bg-white text-pink-600 font-semibold px-4 py-1.5 rounded-lg hover:bg-pink-100 transition duration-200 shadow-sm"
+                className="bg-white text-pink-600 font-semibold px-5 py-2 rounded-xl hover:bg-pink-50 hover:text-pink-700 shadow-md transition transform hover:-translate-y-0.5"
                 onClick={() => setOpen(false)}
               >
                 Register

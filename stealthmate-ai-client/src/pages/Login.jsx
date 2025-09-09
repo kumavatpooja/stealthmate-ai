@@ -7,7 +7,7 @@ import api from "../utils/axios";
 
 import LoginCard from "../assets/logincard.png";
 import userIcon from "../assets/user.png";
-import GoogleIcon from "../assets/googleicon.jpg";
+import GoogleIcon from "../assets/googleicon.png";
 
 const OTP_LENGTH = 6;
 

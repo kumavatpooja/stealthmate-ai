@@ -6,7 +6,8 @@ const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const cron = require('node-cron');
 const morgan = require('morgan');
-require('dotenv').config();
+require("dotenv").config({ override: true });
+
 
 // 📦 Models
 const User = require('./models/User');
