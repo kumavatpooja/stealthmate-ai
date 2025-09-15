@@ -13,8 +13,9 @@ const upload = multer({ storage });
 // ✅ GET Latest Resume Info for Logged-in User
 router.get("/confirm", authMiddleware, async (req, res) => {
   try {
+    // 🔑 Fix: use "uploadedAt" instead of "createdAt"
     const latestResume = await Resume.findOne({ user: req.userId }).sort({
-      createdAt: -1,
+      uploadedAt: -1,
     });
 
     if (!latestResume) {
@@ -59,13 +60,13 @@ router.post(
 
       const { preferredLanguage, tone, jobRole, extraInfo } = req.body;
 
-      // ✅ Create and save resume
+      // ✅ Save resume (with fallback for jobRole)
       const newResume = new Resume({
         user: req.userId,
         resumeText,
         preferredLanguage,
         tone,
-        jobRole,
+        jobRole: jobRole || "Not Specified", // 🔑 fallback if empty
         extraInfo,
       });
 
@@ -80,7 +81,6 @@ router.post(
       res.status(500).json({
         message: "Server error",
         error: err.message,
-        stack: err.stack, // 👈 helps debugging
       });
     }
   }
