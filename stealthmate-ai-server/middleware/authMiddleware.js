@@ -9,22 +9,27 @@ module.exports = async function authMiddleware(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId).select("lastToken role email name");
+    const user = await User.findById(decoded.userId).select(
+      "lastToken role email name"
+    );
 
     if (!user) return res.status(401).json({ message: "User not found" });
 
-    // ✅ Optional: only enforce token revocation if you want cross-device logout
+    // ✅ Optional: enforce token revocation
     if (user.lastToken && user.lastToken !== token) {
       return res.status(401).json({ message: "Token revoked" });
     }
 
-    // ✅ attach user to req
+    // ✅ attach user details
     req.user = {
       id: user._id,
       name: user.name,
       email: user.email,
       role: user.role || "user",
     };
+
+    // ✅ 🔑 this is the important fix
+    req.userId = user._id;
 
     next();
   } catch (err) {

@@ -12,17 +12,14 @@ const useAuthSync = () => {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        const BASE_URL =
-          import.meta.env.MODE === "development"
-            ? "http://localhost:10000"
-            : "https://stealthmate-ai.onrender.com";
+        // ✅ Use same backend URL everywhere
+        const BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
-        // ✅ Call /api/auth/me
+        // Call /api/auth/me
         const res = await axios.get(`${BASE_URL}/api/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        // 👀 Log full response to check user + role
         console.log("✅ Auth Sync Response:", res.data);
 
       } catch (error) {

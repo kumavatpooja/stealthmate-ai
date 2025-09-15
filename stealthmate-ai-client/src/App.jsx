@@ -16,6 +16,7 @@ import { useAuthContext } from "./context/AuthContext";
 import useAuthSync from "./hooks/useAuthSync"; // ✅ added
 
 import AdminDashboard from "./pages/AdminDashboard";
+import ResumeUpload from "./pages/ResumeUpload"; // ✅ add this import
 
 const App = () => {
   const { user } = useAuthContext();
@@ -43,6 +44,14 @@ const App = () => {
             </PrivateRoute>
           }
         />
+        <Route
+          path="/resume-upload"
+          element={
+         <PrivateRoute>
+         <ResumeUpload />
+        </PrivateRoute>
+     }
+     />
 
         <Route
           path="/admin"

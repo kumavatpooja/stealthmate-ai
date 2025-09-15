@@ -22,6 +22,7 @@
     "google-auth-library": "^10.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.10.0",
     "mongoose": "^8.16.1",
     "morgan": "^1.10.1",
     "multer": "^2.0.1",
@@ -30,6 +31,7 @@
     "openai": "^5.8.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "pdf-parse": "^1.1.1",
     "tesseract.js": "^6.0.1"
   },
   "devDependencies": {

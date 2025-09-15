@@ -8,7 +8,6 @@ const cron = require('node-cron');
 const morgan = require('morgan');
 require("dotenv").config({ override: true });
 
-
 // 📦 Models
 const User = require('./models/User');
 
@@ -39,17 +38,17 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
 
-// ✅ CORS Setup (FIXED)
+// ✅ CORS Setup
 const allowedOrigins = [
-  "http://localhost:5173", // local dev
-  "https://stealthmate-ai.netlify.app", // main Netlify site
-  "https://68b17894e66a23268249e7bf--stealthmate-ai.netlify.app", // Netlify preview/deploys
+  "http://localhost:5173",
+  "https://stealthmate-ai.netlify.app",
+  "https://68b17894e66a23268249e7bf--stealthmate-ai.netlify.app",
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // allow tools like Postman
+      if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
@@ -61,10 +60,11 @@ app.use(
   })
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// ✅ Allow larger request bodies (fixes 413 error)
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ limit: "5mb", extended: true }));
 
-// 🛡️ Session Management (production-ready with MongoDB)
+// 🛡️ Session Management
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'your-default-secret',
@@ -75,10 +75,10 @@ app.use(
       collectionName: 'sessions',
     }),
     cookie: {
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in prod
+      secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 1000 * 60 * 60, // 1 hour
+      maxAge: 1000 * 60 * 60,
     },
   })
 );
@@ -107,7 +107,7 @@ app.get('/api/test/ping', (req, res) => {
   res.json({ message: '✅ StealthMate AI Server Running' });
 });
 
-// 🔁 Cron Job: Reset plan daily at midnight
+// 🔁 Cron Job
 cron.schedule('0 0 * * *', async () => {
   try {
     const now = new Date();
