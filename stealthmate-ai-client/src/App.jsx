@@ -17,6 +17,8 @@ import useAuthSync from "./hooks/useAuthSync"; // ✅ added
 
 import AdminDashboard from "./pages/AdminDashboard";
 import ResumeUpload from "./pages/ResumeUpload"; // ✅ add this import
+import LiveInterview from "./pages/LiveInterview";
+
 
 const App = () => {
   const { user } = useAuthContext();
@@ -52,6 +54,14 @@ const App = () => {
         </PrivateRoute>
      }
      />
+     <Route
+     path="/interview"
+     element={
+       <PrivateRoute>
+         <LiveInterview />
+      </PrivateRoute>
+     }
+   />
 
         <Route
           path="/admin"
