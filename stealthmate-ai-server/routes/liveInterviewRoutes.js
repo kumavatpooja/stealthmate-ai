@@ -1,3 +1,5 @@
+// stealthmate-ai-server/routes/liveInterviewRoutes.js
+
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
@@ -14,8 +16,8 @@ router.post('/ask', authMiddleware, checkPlanMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Question is required' });
     }
 
-    // 📝 Get latest resume
-    const resume = await Resume.findOne({ user: req.userId }).sort({ createdAt: -1 });
+    // 📝 Always fetch the latest uploaded resume
+    const resume = await Resume.findOne({ user: req.userId }).sort({ uploadedAt: -1 });
     if (!resume) {
       return res.status(400).json({ message: 'Resume data missing. Please upload first.' });
     }
@@ -51,6 +53,3 @@ router.get('/history', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
-
-
-

@@ -1,23 +1,24 @@
 // src/pages/ResumeUpload.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload } from "lucide-react";
+import { Upload, Loader2 } from "lucide-react";
 import axios from "../utils/axios";
 
 const ResumeUpload = () => {
   const [file, setFile] = useState(null);
-  const [progress, setProgress] = useState(0); // ✅ progress bar
+  const [progress, setProgress] = useState(0);
   const [language, setLanguage] = useState("English");
   const [tone, setTone] = useState("Professional");
   const [jobRole, setJobRole] = useState("");
   const [extraInfo, setExtraInfo] = useState("");
+  const [uploading, setUploading] = useState(false);
   const navigate = useNavigate();
 
   const handleFileChange = (e) => {
     const uploaded = e.target.files[0];
     if (uploaded) {
       setFile(uploaded);
-      setProgress(100); // simulate full bar
+      setProgress(100); // ✅ always full once selected
     }
   };
 
@@ -30,6 +31,7 @@ const ResumeUpload = () => {
     }
 
     try {
+      setUploading(true);
       const token = localStorage.getItem("token");
 
       const formData = new FormData();
@@ -51,12 +53,14 @@ const ResumeUpload = () => {
     } catch (err) {
       console.error("❌ Upload error:", err);
       alert(err.response?.data?.message || "Upload failed");
+    } finally {
+      setUploading(false);
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-pink-200">
-      {/* ✅ Card same color everywhere */}
+      {/* Card */}
       <div className="bg-white shadow-xl rounded-3xl p-8 w-full max-w-lg border border-pink-200">
         <h1 className="text-3xl font-extrabold text-center mb-6 bg-gradient-to-r from-pink-500 to-purple-600 bg-clip-text text-pink-500">
           Upload Your Resume & Extra Info
@@ -82,9 +86,9 @@ const ResumeUpload = () => {
               <p className="text-sm font-medium text-gray-700">
                 📄 {file.name} — {progress}%
               </p>
-              <div className="w-full h-2 bg-gray-200 rounded-full mt-1">
+              <div className="w-full h-2 bg-gray-200 rounded-full mt-1 overflow-hidden">
                 <div
-                  className="h-2 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 transition-all"
+                  className="h-2 rounded-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-300 ease-in-out"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -156,9 +160,21 @@ const ResumeUpload = () => {
           {/* Submit */}
           <button
             type="submit"
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white font-semibold shadow-lg transform transition hover:scale-105 hover:shadow-xl"
+            disabled={uploading}
+            className={`w-full py-3 rounded-xl font-semibold shadow-lg transform transition hover:scale-105 hover:shadow-xl ${
+              uploading
+                ? "bg-green-500 text-white cursor-not-allowed"
+                : "bg-gradient-to-r from-pink-500 to-purple-600 text-white"
+            }`}
           >
-            Upload & Save
+            {uploading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Uploading...
+              </span>
+            ) : (
+              "Upload & Save"
+            )}
           </button>
         </form>
       </div>

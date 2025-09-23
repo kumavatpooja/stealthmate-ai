@@ -13,51 +13,53 @@ import api from "../api/axiosConfig";
 const LiveInterview = () => {
   const [question, setQuestion] = useState("What is React?");
   const [answer, setAnswer] = useState(
-    "React is a JavaScript library for building user interfaces. It uses a declarative approach and virtual DOM for efficient updates."
+    "React is a JavaScript library for building user interfaces."
   );
 
   const [currentWordIndex, setCurrentWordIndex] = useState(-1);
-  const [listening, setListening] = useState(false);
-  const recognitionRef = useRef(null);
+
+  // 🎤 Two separate mic states
+  const [listeningInterviewer, setListeningInterviewer] = useState(false);
+  const [listeningReading, setListeningReading] = useState(false);
+
+  const interviewerRef = useRef(null);
+  const readingRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
 
-  // camera state
+  // 📸 Camera state
   const [showCamera, setShowCamera] = useState(false);
-  const [capturedImage, setCapturedImage] = useState(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
 
   const words = answer.split(" ");
 
-  // 🎤 Mic 1 → interviewer (only fill input, no API call)
+  // 🎤 Mic 1 → interviewer question
   const listenInterviewer = () => {
     if (!("webkitSpeechRecognition" in window)) {
-      alert("Speech recognition not supported in this browser.");
+      alert("Speech recognition not supported.");
       return;
     }
     const recognition = new window.webkitSpeechRecognition();
     recognition.lang = "en-US";
     recognition.interimResults = false;
 
+    recognition.onstart = () => setListeningInterviewer(true);
+    recognition.onend = () => setListeningInterviewer(false);
+
     recognition.onresult = (e) => {
       const transcript = e.results[0][0].transcript.trim();
-      setQuestion(transcript); // ✅ just set the question
+      setQuestion(transcript);
     };
 
-    recognition.onerror = (e) => {
-      console.error("❌ Interviewer mic error:", e);
-    };
-
+    interviewerRef.current = recognition;
     recognition.start();
   };
 
-  // 🧠 Send question to backend with resume context
+  // 🧠 Send Q to backend
   const askLiveQuestion = async (q) => {
-    if (loading) return;
-    if (!q || q.trim() === "") return;
-
+    if (loading || !q?.trim()) return;
     try {
       setLoading(true);
       const res = await api.post("/live/ask", { question: q });
@@ -67,99 +69,27 @@ const LiveInterview = () => {
       }
     } catch (err) {
       if (err.response?.status === 429) {
-        setAnswer("⚠️ Too many requests. Please wait before asking again.");
+        setAnswer("⚠️ Too many requests. Please wait.");
       } else {
-        console.error("❌ Live Interview Ask Error:", err);
-        setAnswer("⚠️ Sorry, I couldn't process this question. Please try again.");
+        setAnswer("⚠️ Could not process this question.");
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // 📷 Camera helpers
-  const openCamera = async () => {
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { width: 640 } });
-      streamRef.current = s;
-      if (videoRef.current) {
-        videoRef.current.srcObject = s;
-        videoRef.current.play();
-      }
-      setShowCamera(true);
-    } catch (err) {
-      console.error("Camera error:", err);
-      alert("Unable to access camera. Check permissions.");
-    }
-  };
-
-  const closeCamera = () => {
-    if (videoRef.current) {
-      try {
-        videoRef.current.pause();
-        videoRef.current.srcObject = null;
-      } catch (e) {}
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    setShowCamera(false);
-  };
-
-  const capturePhoto = async () => {
-    if (!videoRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current || document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-    setCapturedImage(dataUrl);
-    closeCamera();
-
-    try {
-      setLoading(true);
-      const blob = await (await fetch(dataUrl)).blob();
-      const formData = new FormData();
-      formData.append("image", blob, "capture.jpg");
-
-      const ocrRes = await api.post("/ocr/image", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      const extractedText = ocrRes.data.text?.trim();
-      if (!extractedText) {
-        setAnswer("⚠️ No text detected in image. Try again with clearer photo.");
-        return;
-      }
-
-      setQuestion(extractedText);
-
-      const solveRes = await api.post("/ocr/solve", { extractedText });
-      if (solveRes?.data?.answer) {
-        setAnswer(solveRes.data.answer);
-        setCurrentWordIndex(-1);
-      }
-    } catch (err) {
-      console.error("❌ OCR or Solve error:", err);
-      setAnswer("⚠️ Failed to extract/solve from image.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 🎤 Mic 2 → candidate reading tracker
+  // 🎤 Mic 2 → candidate reading
   const trackReading = () => {
     if (!("webkitSpeechRecognition" in window)) {
-      alert("Speech recognition not supported in this browser.");
+      alert("Speech recognition not supported.");
       return;
     }
-
     const recognition = new window.webkitSpeechRecognition();
     recognition.lang = "en-US";
     recognition.continuous = true;
+
+    recognition.onstart = () => setListeningReading(true);
+    recognition.onend = () => setListeningReading(false);
 
     recognition.onresult = (e) => {
       const spoken = e.results[e.results.length - 1][0].transcript;
@@ -172,24 +102,85 @@ const LiveInterview = () => {
           break;
         }
       }
-      if (matchedIndex > currentWordIndex) setCurrentWordIndex(matchedIndex);
+      if (matchedIndex > currentWordIndex) {
+        setCurrentWordIndex(matchedIndex);
+      }
     };
 
-    recognition.onend = () => {
-      setListening(false);
-    };
-
+    readingRef.current = recognition;
     recognition.start();
-    recognitionRef.current = recognition;
-    setListening(true);
   };
 
   const stopReading = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setListening(false);
-      setCurrentWordIndex(-1);
+    if (readingRef.current) {
+      readingRef.current.stop();
+      setListeningReading(false);
     }
+  };
+
+  // 📷 Camera functions
+  const openCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setShowCamera(true);
+    } catch (err) {
+      console.error("Camera error:", err);
+      alert("Unable to access camera. Check permissions.");
+    }
+  };
+
+  const closeCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setShowCamera(false);
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current) return;
+    const canvas = canvasRef.current;
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(async (blob) => {
+      try {
+        setLoading(true);
+        const formData = new FormData();
+        formData.append("image", blob, "capture.jpg");
+
+        const ocrRes = await api.post("/ocr/image", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+
+        const extractedText = ocrRes.data.text?.trim();
+        if (!extractedText) {
+          setAnswer("⚠️ No text detected in image.");
+          return;
+        }
+
+        setQuestion(extractedText);
+
+        const solveRes = await api.post("/ocr/solve", { extractedText });
+        if (solveRes?.data?.answer) {
+          setAnswer(solveRes.data.answer);
+          setCurrentWordIndex(-1);
+        }
+      } catch (err) {
+        setAnswer("⚠️ Failed to extract/solve from image.");
+      } finally {
+        setLoading(false);
+        closeCamera();
+      }
+    }, "image/jpeg");
   };
 
   return (
@@ -217,7 +208,7 @@ const LiveInterview = () => {
             <button
               onClick={listenInterviewer}
               className={`w-24 h-24 flex items-center justify-center rounded-full 
-                         ${listening ? "bg-red-500" : "bg-gradient-to-r from-pink-500 to-purple-600"} 
+                         ${listeningInterviewer ? "bg-red-500" : "bg-gradient-to-r from-pink-500 to-purple-600"} 
                          text-white shadow-[0_0_25px_rgba(255,0,150,0.8)] 
                          hover:scale-110 transition animate-pulse`}
               title="Listen interviewer question"
@@ -248,13 +239,11 @@ const LiveInterview = () => {
 
         {/* RIGHT PANEL */}
         <div className="p-6 flex flex-col h-full relative col-span-2">
-          {/* Question */}
           <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-xl mb-5 shadow-[0_0_20px_rgba(255,0,150,0.6)]">
             <h2 className="font-semibold text-gray-800 text-lg">❓ Question</h2>
             <p className="text-gray-600 mt-1 text-lg">{question}</p>
           </div>
 
-          {/* Answer */}
           <div className="flex-1 bg-gray-900 text-white p-6 rounded-xl shadow-[0_0_30px_rgba(255,0,150,0.8)] flex flex-col w-full relative">
             <h2 className="font-semibold text-pink-400 text-xl">💡 AI Answer</h2>
             <p className="mt-4 leading-relaxed flex-1 overflow-y-auto text-lg">
@@ -272,15 +261,8 @@ const LiveInterview = () => {
               ))}
             </p>
 
-            {/* Example code area */}
-            <pre className="mt-6 bg-gray-800 text-green-300 p-5 rounded-lg text-lg font-mono overflow-x-auto">
-{`function HelloWorld() {
-  return <h1>Hello, world!</h1>;
-}`}
-            </pre>
-
-            {/* Mic 2 */}
-            {!listening ? (
+            {/* Candidate Reading Mic */}
+            {!listeningReading ? (
               <button
                 onClick={trackReading}
                 className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-full 
@@ -301,7 +283,6 @@ const LiveInterview = () => {
             )}
           </div>
 
-          {/* Actions */}
           <div className="flex gap-4 mt-6 justify-center">
             <button
               onClick={() => askLiveQuestion(question)}
@@ -319,7 +300,7 @@ const LiveInterview = () => {
         </div>
       </div>
 
-      {/* Camera modal */}
+      {/* Camera Modal */}
       {showCamera && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl p-4 w-[720px] max-w-full">
@@ -341,7 +322,12 @@ const LiveInterview = () => {
               </div>
             </div>
             <div className="w-full h-[420px] bg-black flex items-center justify-center rounded-md overflow-hidden">
-              <video ref={videoRef} className="w-full h-full object-cover" />
+              <video
+                ref={videoRef}
+                className="w-full h-full object-cover"
+                autoPlay
+                playsInline
+              />
               <canvas ref={canvasRef} style={{ display: "none" }} />
             </div>
           </div>
