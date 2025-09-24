@@ -1,3 +1,4 @@
+// src/pages/Dashboard.jsx
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -27,9 +28,9 @@ const SidebarItem = ({ icon: Icon, label, to }) => (
 );
 
 export default function Dashboard() {
-  const [sidebarOpen, setSidebarOpen] = useState(false); // mobile sidebar
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mockOpen, setMockOpen] = useState(false);
-  const [resumeStatus, setResumeStatus] = useState(null); // ✅ resume info
+  const [resumeStatus, setResumeStatus] = useState(null);
   const navigate = useNavigate();
 
   // Mock state
@@ -46,23 +47,20 @@ export default function Dashboard() {
     setMockOpen(false);
   };
 
-  // ✅ Fetch Resume Status on load
+  // ✅ Fetch only ACTIVE resume
   useEffect(() => {
     const fetchResume = async () => {
       try {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        const res = await axios.get("/resume/confirm", {
+        const res = await axios.get("/resume/active", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setResumeStatus(res.data);
+        setResumeStatus(res.data || null);
       } catch (err) {
-        if (err.response?.status === 404) {
-          setResumeStatus(null); // no resume uploaded
-        } else {
-          console.error("❌ Resume fetch error:", err.message);
-        }
+        setResumeStatus(null);
+        console.error("❌ Resume fetch error:", err.message);
       }
     };
     fetchResume();
@@ -170,6 +168,13 @@ export default function Dashboard() {
           />
         </section>
 
+        {/* Resume Upload Warning */}
+        {!resumeStatus && (
+          <div className="mt-6 bg-yellow-100 text-yellow-800 p-4 rounded-xl text-center shadow">
+            ⚠️ No active resume found. Please upload one before starting an interview.
+          </div>
+        )}
+
         {/* Tools */}
         <section className="mt-10">
           <h3 className="text-lg font-semibold mb-4">🚀 AI Tools</h3>
@@ -178,7 +183,7 @@ export default function Dashboard() {
               title="🎤 AI Live Interview"
               subtitle="Live voice + text interviews"
               gradient="from-purple-500 to-pink-500"
-              onClick={() => (window.location.href = "/interview")}
+              onClick={() => navigate("/interview")}
               badge="Live"
             />
             <ToolCard
@@ -193,13 +198,13 @@ export default function Dashboard() {
               title="📜 History"
               subtitle="View your past sessions"
               gradient="from-purple-300 to-pink-300"
-              onClick={() => (window.location.href = "/history")}
+              onClick={() => navigate("/history")}
             />
             <ToolCard
               title="💳 Subscription Plans"
               subtitle="Manage or upgrade plan"
               gradient="from-yellow-400 to-pink-400"
-              onClick={() => (window.location.href = "/pricing")}
+              onClick={() => navigate("/pricing")}
             />
             <ToolCard
               title="📄 Resume Upload"

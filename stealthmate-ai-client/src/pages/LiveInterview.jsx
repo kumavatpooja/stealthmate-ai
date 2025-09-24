@@ -8,6 +8,9 @@ import {
   History,
   Square,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import api from "../api/axiosConfig";
 
 const LiveInterview = () => {
@@ -17,14 +20,8 @@ const LiveInterview = () => {
   );
 
   const [currentWordIndex, setCurrentWordIndex] = useState(-1);
-
-  // 🎤 Two separate mic states
-  const [listeningInterviewer, setListeningInterviewer] = useState(false);
-  const [listeningReading, setListeningReading] = useState(false);
-
-  const interviewerRef = useRef(null);
-  const readingRef = useRef(null);
-
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
   const [loading, setLoading] = useState(false);
 
   // 📸 Camera state
@@ -38,28 +35,24 @@ const LiveInterview = () => {
   // 🎤 Mic 1 → interviewer question
   const listenInterviewer = () => {
     if (!("webkitSpeechRecognition" in window)) {
-      alert("Speech recognition not supported.");
+      alert("Speech recognition not supported in this browser.");
       return;
     }
     const recognition = new window.webkitSpeechRecognition();
     recognition.lang = "en-US";
     recognition.interimResults = false;
 
-    recognition.onstart = () => setListeningInterviewer(true);
-    recognition.onend = () => setListeningInterviewer(false);
-
     recognition.onresult = (e) => {
       const transcript = e.results[0][0].transcript.trim();
       setQuestion(transcript);
     };
 
-    interviewerRef.current = recognition;
     recognition.start();
   };
 
   // 🧠 Send Q to backend
   const askLiveQuestion = async (q) => {
-    if (loading || !q?.trim()) return;
+    if (loading || !q || q.trim() === "") return;
     try {
       setLoading(true);
       const res = await api.post("/live/ask", { question: q });
@@ -88,13 +81,9 @@ const LiveInterview = () => {
     recognition.lang = "en-US";
     recognition.continuous = true;
 
-    recognition.onstart = () => setListeningReading(true);
-    recognition.onend = () => setListeningReading(false);
-
     recognition.onresult = (e) => {
       const spoken = e.results[e.results.length - 1][0].transcript;
       const spokenWords = spoken.trim().toLowerCase().split(" ");
-
       let matchedIndex = currentWordIndex;
       for (let i = currentWordIndex + 1; i < words.length; i++) {
         if (spokenWords.includes(words[i].toLowerCase().replace(/[^\w]/g, ""))) {
@@ -102,19 +91,20 @@ const LiveInterview = () => {
           break;
         }
       }
-      if (matchedIndex > currentWordIndex) {
-        setCurrentWordIndex(matchedIndex);
-      }
+      if (matchedIndex > currentWordIndex) setCurrentWordIndex(matchedIndex);
     };
 
-    readingRef.current = recognition;
+    recognition.onend = () => setListening(false);
     recognition.start();
+    recognitionRef.current = recognition;
+    setListening(true);
   };
 
   const stopReading = () => {
-    if (readingRef.current) {
-      readingRef.current.stop();
-      setListeningReading(false);
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      setListening(false);
+      setCurrentWordIndex(-1);
     }
   };
 
@@ -123,10 +113,12 @@ const LiveInterview = () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
+        audio: false,
       });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        await videoRef.current.play();
       }
       setShowCamera(true);
     } catch (err) {
@@ -208,7 +200,7 @@ const LiveInterview = () => {
             <button
               onClick={listenInterviewer}
               className={`w-24 h-24 flex items-center justify-center rounded-full 
-                         ${listeningInterviewer ? "bg-red-500" : "bg-gradient-to-r from-pink-500 to-purple-600"} 
+                         ${listening ? "bg-red-500" : "bg-gradient-to-r from-pink-500 to-purple-600"} 
                          text-white shadow-[0_0_25px_rgba(255,0,150,0.8)] 
                          hover:scale-110 transition animate-pulse`}
               title="Listen interviewer question"
@@ -246,23 +238,33 @@ const LiveInterview = () => {
 
           <div className="flex-1 bg-gray-900 text-white p-6 rounded-xl shadow-[0_0_30px_rgba(255,0,150,0.8)] flex flex-col w-full relative">
             <h2 className="font-semibold text-pink-400 text-xl">💡 AI Answer</h2>
-            <p className="mt-4 leading-relaxed flex-1 overflow-y-auto text-lg">
-              {words.map((word, index) => (
-                <span
-                  key={index}
-                  className={
-                    index <= currentWordIndex
-                      ? "text-pink-400 font-bold"
-                      : "text-white"
-                  }
-                >
-                  {word}{" "}
-                </span>
-              ))}
-            </p>
+            <div className="mt-4 leading-relaxed flex-1 overflow-y-auto text-lg prose prose-invert max-w-none">
+              <ReactMarkdown
+                children={answer}
+                components={{
+                  code({ node, inline, className, children, ...props }) {
+                    const match = /language-(\w+)/.exec(className || "");
+                    return !inline && match ? (
+                      <SyntaxHighlighter
+                        style={oneDark}
+                        language={match[1]}
+                        PreTag="div"
+                        {...props}
+                      >
+                        {String(children).replace(/\n$/, "")}
+                      </SyntaxHighlighter>
+                    ) : (
+                      <code className="bg-gray-800 px-1 py-0.5 rounded" {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                }}
+              />
+            </div>
 
             {/* Candidate Reading Mic */}
-            {!listeningReading ? (
+            {!listening ? (
               <button
                 onClick={trackReading}
                 className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-full 
@@ -327,6 +329,7 @@ const LiveInterview = () => {
                 className="w-full h-full object-cover"
                 autoPlay
                 playsInline
+                muted
               />
               <canvas ref={canvasRef} style={{ display: "none" }} />
             </div>

@@ -1,89 +1,93 @@
-// stealthmate-ai-server/routes/resumeRoutes.js
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const Resume = require("../models/Resume");
 const authMiddleware = require("../middleware/authMiddleware");
-const parseResume = require("../utils/parseResume");
 
-// ✅ Multer setup → keep files in memory
+// 🗂️ Multer config (memory storage)
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// ✅ GET Latest Resume Info for Logged-in User
-router.get("/confirm", authMiddleware, async (req, res) => {
+/**
+ * 📌 Upload or update resume
+ * Route: POST /api/resume/upload
+ */
+router.post("/upload", authMiddleware, upload.single("resume"), async (req, res) => {
   try {
-    // 🔑 Fix: use "uploadedAt" instead of "createdAt"
-    const latestResume = await Resume.findOne({ user: req.userId }).sort({
-      uploadedAt: -1,
-    });
-
-    if (!latestResume) {
-      return res.status(404).json({ message: "No resume info found" });
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
     }
 
-    res.json(latestResume);
-  } catch (err) {
-    console.error("❌ Error fetching resume info:", err);
-    res.status(500).json({
-      message: "Server error",
-      error: err.message,
+    const resumeText = req.body.resumeText || req.file.buffer.toString("utf-8");
+    const { jobRole, preferredLanguage, tone, extraInfo } = req.body;
+
+    const newResume = new Resume({
+      user: req.userId,
+      resumeText,
+      jobRole,
+      preferredLanguage,
+      tone,
+      extraInfo,
+      uploadedAt: new Date(),
     });
+
+    await newResume.save();
+
+    res.json({ message: "✅ Resume uploaded successfully", resume: newResume });
+  } catch (err) {
+    console.error("❌ Resume upload error:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
-// ✅ Upload Resume + Extra Info (FormData with file)
-router.post(
-  "/upload",
-  authMiddleware,
-  upload.single("resumeFile"), // 🔑 matches frontend FormData.append("resumeFile", file)
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No resume file uploaded" });
-      }
-
-      console.log("📂 File received:", req.file.originalname);
-
-      const fileBuffer = req.file.buffer;
-      const fileType = req.file.originalname.split(".").pop().toLowerCase();
-
-      let resumeText;
-      try {
-        // ✅ Parse file content
-        resumeText = await parseResume(fileBuffer, fileType);
-        console.log("✅ Parsed text length:", resumeText?.length);
-      } catch (parseErr) {
-        console.warn("⚠️ Parse failed:", parseErr.message);
-        resumeText = `⚠️ Could not parse file type: ${fileType}`;
-      }
-
-      const { preferredLanguage, tone, jobRole, extraInfo } = req.body;
-
-      // ✅ Save resume (with fallback for jobRole)
-      const newResume = new Resume({
-        user: req.userId,
-        resumeText,
-        preferredLanguage,
-        tone,
-        jobRole: jobRole || "Not Specified", // 🔑 fallback if empty
-        extraInfo,
-      });
-
-      await newResume.save();
-
-      res.status(201).json({
-        message: "Resume uploaded successfully",
-        resumeId: newResume._id,
-      });
-    } catch (err) {
-      console.error("❌ Error uploading resume:", err);
-      res.status(500).json({
-        message: "Server error",
-        error: err.message,
-      });
+/**
+ * 📌 Confirm latest resume (legacy route)
+ * Route: GET /api/resume/confirm
+ */
+router.get("/confirm", authMiddleware, async (req, res) => {
+  try {
+    const resume = await Resume.findOne({ user: req.userId }).sort({ uploadedAt: -1 });
+    if (!resume) {
+      return res.status(404).json({ message: "No resume uploaded yet" });
     }
+    res.json(resume);
+  } catch (err) {
+    console.error("❌ Resume confirm error:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
-);
+});
+
+/**
+ * 📌 Get active resume (recommended route for dashboard)
+ * Route: GET /api/resume/active
+ */
+router.get("/active", authMiddleware, async (req, res) => {
+  try {
+    const resume = await Resume.findOne({ user: req.userId }).sort({ uploadedAt: -1 });
+
+    if (!resume) {
+      return res.status(404).json({ message: "No active resume found" });
+    }
+
+    res.json(resume);
+  } catch (err) {
+    console.error("❌ Resume fetch error:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+/**
+ * 📌 Delete all resumes for user (optional cleanup)
+ * Route: DELETE /api/resume/clear
+ */
+router.delete("/clear", authMiddleware, async (req, res) => {
+  try {
+    await Resume.deleteMany({ user: req.userId });
+    res.json({ message: "🗑️ All resumes cleared successfully" });
+  } catch (err) {
+    console.error("❌ Resume delete error:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
 
 module.exports = router;

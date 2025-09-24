@@ -1,3 +1,4 @@
+//stealthmate-ai-server\controllers\liveInterviewHandler.js
 const InterviewLog = require('../models/InterviewLog');
 const { generateAnswerFromAI } = require('../utils/openaiUtils');
 
