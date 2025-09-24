@@ -6,7 +6,6 @@ import {
   Send,
   RefreshCcw,
   History,
-  Square,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -19,14 +18,10 @@ const LiveInterview = () => {
     "React is a JavaScript library for building user interfaces."
   );
 
-  const [currentWordIndex, setCurrentWordIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
 
-  // 🎤 Mic states
-  const [listeningInterviewer, setListeningInterviewer] = useState(false);
-  const [listeningCandidate, setListeningCandidate] = useState(false);
-  const interviewerRef = useRef(null);
-  const candidateRef = useRef(null);
+  // 🎤 Interviewer mic state
+  const [listening, setListening] = useState(false);
 
   // 📸 Camera state
   const [showCamera, setShowCamera] = useState(false);
@@ -35,11 +30,9 @@ const LiveInterview = () => {
   const streamRef = useRef(null);
 
   // ⚠️ Free plan modal
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
-  const words = answer.split(" ");
-
-  // 🎤 Mic 1 → interviewer question
+  // 🎤 Mic → interviewer question
   const listenInterviewer = () => {
     if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
       alert("Speech recognition not supported in this browser.");
@@ -50,21 +43,19 @@ const LiveInterview = () => {
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
     recognition.interimResults = false;
-    recognition.continuous = false;
 
-    recognition.onstart = () => setListeningInterviewer(true);
+    recognition.onstart = () => setListening(true);
 
     recognition.onresult = (e) => {
       const transcript = e.results[0][0].transcript.trim();
-      setQuestion(transcript);
-      askLiveQuestion(transcript); // 🚀 auto-send
+      setQuestion(transcript); // show in input box
+      askLiveQuestion(transcript); // auto-send to backend
     };
 
-    recognition.onerror = () => setListeningInterviewer(false);
-    recognition.onend = () => setListeningInterviewer(false);
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
 
     recognition.start();
-    interviewerRef.current = recognition;
   };
 
   // 🧠 Send Q to backend
@@ -75,82 +66,31 @@ const LiveInterview = () => {
       const res = await api.post("/live/ask", { question: q });
       if (res?.data?.answer) {
         setAnswer(res.data.answer);
-        setCurrentWordIndex(-1);
       }
     } catch (err) {
-      if (err.response?.status === 429) {
-        setShowUpgradeModal(true); // ⚠️ show modal
-      } else {
-        setAnswer("⚠️ Could not process this question.");
+      if (err.response?.status === 403 || err.response?.status === 429) {
+        setShowLimitModal(true); // show free plan popup
+        return;
       }
+      setAnswer("⚠️ Could not process this question.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 🎤 Mic 2 → candidate reading
-  const trackReading = () => {
-    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
-      alert("Speech recognition not supported.");
-      return;
-    }
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.continuous = true;
-
-    recognition.onresult = (e) => {
-      const spoken = e.results[e.results.length - 1][0].transcript;
-      const spokenWords = spoken.trim().toLowerCase().split(" ");
-      let matchedIndex = currentWordIndex;
-      for (let i = currentWordIndex + 1; i < words.length; i++) {
-        if (spokenWords.includes(words[i].toLowerCase().replace(/[^\w]/g, ""))) {
-          matchedIndex = i;
-          break;
-        }
-      }
-      if (matchedIndex > currentWordIndex) setCurrentWordIndex(matchedIndex);
-    };
-
-    recognition.onend = () => setListeningCandidate(false);
-    recognition.start();
-    candidateRef.current = recognition;
-    setListeningCandidate(true);
-  };
-
-  const stopReading = () => {
-    if (candidateRef.current) {
-      candidateRef.current.stop();
-      setListeningCandidate(false);
-      setCurrentWordIndex(-1);
-    }
-  };
-
-  // 📷 Camera
+  // 📷 Camera functions
   const openCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
-        audio: false,
+        audio: false, // ✅ no mic conflict
       });
       streamRef.current = stream;
-      setShowCamera(true);
-
       if (videoRef.current) {
-        if ("srcObject" in videoRef.current) {
-          videoRef.current.srcObject = stream;
-        } else {
-          videoRef.current.src = window.URL.createObjectURL(stream);
-        }
-        videoRef.current.onloadedmetadata = async () => {
-          try {
-            await videoRef.current.play();
-          } catch (err) {
-            console.warn("Video play blocked:", err);
-          }
-        };
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
       }
+      setShowCamera(true);
     } catch (err) {
       console.error("Camera error:", err);
       alert("Unable to access camera. Check permissions.");
@@ -190,7 +130,10 @@ const LiveInterview = () => {
         }
 
         setQuestion(extractedText);
-        askLiveQuestion(extractedText); // 🚀 send to AI
+        const solveRes = await api.post("/ocr/solve", { extractedText });
+        if (solveRes?.data?.answer) {
+          setAnswer(solveRes.data.answer);
+        }
       } catch (err) {
         setAnswer("⚠️ Failed to extract/solve from image.");
       } finally {
@@ -201,67 +144,67 @@ const LiveInterview = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-200 via-white to-purple-200 p-4">
-      <div className="w-full max-w-7xl h-[85vh] bg-white rounded-3xl shadow grid grid-cols-1 md:grid-cols-3 overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-200 via-white to-purple-200 p-6">
+      <div className="w-full max-w-7xl h-[85vh] bg-white rounded-3xl shadow-[0_4px_30px_rgba(255,0,150,0.4)] grid grid-cols-1 md:grid-cols-3 overflow-hidden">
+        
         {/* LEFT PANEL */}
-        <div className="p-6 flex flex-col justify-between border-r border-gray-200 col-span-1 bg-gradient-to-br from-pink-50 to-white">
-          <h1 className="text-2xl font-extrabold text-pink-600 mb-6">
-            StealthMate AI
-          </h1>
+        <div className="p-6 flex flex-col justify-between items-center border-r border-gray-200 col-span-1">
+          <div className="bg-white rounded-2xl shadow-[0_0_25px_rgba(255,0,150,0.5)] p-6 flex flex-col items-center gap-6 w-full">
+            <h3 className="text-lg font-semibold text-gray-700">🎥 Setup</h3>
 
-          <div className="flex flex-col gap-10 items-center">
             {/* Camera */}
             <button
               onClick={openCamera}
               className="w-20 h-20 flex items-center justify-center rounded-full 
                          bg-gradient-to-r from-purple-500 to-pink-600 text-white 
-                         shadow-lg hover:scale-110 transition"
+                         shadow-[0_0_20px_rgba(255,0,150,0.8)] hover:scale-110 transition"
+              title="Open camera"
             >
               <Camera className="w-10 h-10" />
             </button>
-            <p className="text-sm text-gray-600 mt-2">Enable Camera</p>
+            <p className="text-sm text-gray-600">Enable Camera</p>
 
             {/* Mic 1 */}
             <button
               onClick={listenInterviewer}
-              className={`w-20 h-20 flex items-center justify-center rounded-full 
-                ${listeningInterviewer ? "bg-red-500" : "bg-gradient-to-r from-pink-500 to-purple-600"} 
-                text-white shadow-lg hover:scale-110 transition`}
+              className={`w-24 h-24 flex items-center justify-center rounded-full 
+                         ${listening ? "bg-red-500" : "bg-gradient-to-r from-pink-500 to-purple-600"} 
+                         text-white shadow-[0_0_25px_rgba(255,0,150,0.8)] 
+                         hover:scale-110 transition animate-pulse`}
+              title="Listen interviewer question"
             >
-              <Mic className="w-10 h-10" />
+              <Mic className="w-12 h-12" />
             </button>
-            <p className="text-sm text-gray-600 mt-2">Interviewer Mic</p>
+            <p className="text-sm text-gray-600">Interviewer Mic</p>
           </div>
 
           {/* Question input */}
-          <div className="mt-auto">
-            <div className="flex">
-              <input
-                type="text"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                className="flex-1 p-3 border rounded-l-xl focus:ring-2 focus:ring-pink-400 text-lg"
-                placeholder="Type your question..."
-              />
-              <button
-                onClick={() => askLiveQuestion(question)}
-                disabled={loading}
-                className="px-5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-r-xl hover:scale-105 transition"
-              >
-                {loading ? "..." : <Send className="w-6 h-6" />}
-              </button>
-            </div>
+          <div className="flex w-full max-w-sm mt-8">
+            <input
+              type="text"
+              placeholder="Type your question..."
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              className="flex-1 p-3 border rounded-l-xl focus:ring-2 focus:ring-pink-400 text-lg"
+            />
+            <button
+              onClick={() => askLiveQuestion(question)}
+              disabled={loading}
+              className="px-5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-r-xl hover:scale-105 transition shadow-[0_0_15px_rgba(255,0,150,0.7)]"
+            >
+              {loading ? "..." : <Send className="w-6 h-6" />}
+            </button>
           </div>
         </div>
 
         {/* RIGHT PANEL */}
         <div className="p-6 flex flex-col h-full relative col-span-2">
-          <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-xl mb-5 shadow">
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-xl mb-5 shadow-[0_0_20px_rgba(255,0,150,0.6)]">
             <h2 className="font-semibold text-gray-800 text-lg">❓ Question</h2>
             <p className="text-gray-600 mt-1 text-lg">{question}</p>
           </div>
 
-          <div className="flex-1 bg-gray-900 text-white p-6 rounded-xl shadow flex flex-col w-full relative overflow-y-auto">
+          <div className="flex-1 bg-gray-900 text-white p-6 rounded-xl shadow-[0_0_30px_rgba(255,0,150,0.8)] flex flex-col w-full relative overflow-y-auto">
             <h2 className="font-semibold text-pink-400 text-xl">💡 AI Answer</h2>
             <div className="mt-4 leading-relaxed flex-1 text-lg prose prose-invert max-w-none">
               <ReactMarkdown
@@ -287,39 +230,18 @@ const LiveInterview = () => {
                 }}
               />
             </div>
-
-            {/* Candidate Mic */}
-            {!listeningCandidate ? (
-              <button
-                onClick={trackReading}
-                className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-full 
-                           bg-pink-500 hover:bg-pink-600 text-white transition hover:scale-110"
-                title="Track candidate reading"
-              >
-                <Mic className="w-5 h-5" />
-              </button>
-            ) : (
-              <button
-                onClick={stopReading}
-                className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-full 
-                           bg-red-500 hover:bg-red-600 text-white transition hover:scale-110"
-                title="Stop tracking"
-              >
-                <Square className="w-5 h-5" />
-              </button>
-            )}
           </div>
 
           <div className="flex gap-4 mt-6 justify-center">
             <button
               onClick={() => askLiveQuestion(question)}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow hover:scale-105 transition"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-[0_0_20px_rgba(255,0,150,0.7)] hover:scale-105 transition"
             >
               <RefreshCcw className="w-4 h-4" /> Re-ask
             </button>
             <button
               onClick={() => (window.location.href = "/history")}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow hover:scale-105 transition"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-[0_0_20px_rgba(255,0,150,0.7)] hover:scale-105 transition"
             >
               <History className="w-4 h-4" /> History
             </button>
@@ -363,18 +285,16 @@ const LiveInterview = () => {
       )}
 
       {/* Free Plan Modal */}
-      {showUpgradeModal && (
+      {showLimitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl p-6 max-w-sm text-center shadow-lg">
-            <h2 className="text-xl font-bold text-red-600 mb-4">
-              ⚠️ Free plan limit reached
-            </h2>
+          <div className="bg-white p-6 rounded-xl shadow-lg w-[400px] text-center">
+            <h2 className="text-lg font-bold text-pink-600 mb-3">⚠️ Free Plan Limit</h2>
             <p className="text-gray-700 mb-4">
-              You’ve used your 3 free questions. Please upgrade to continue.
+              Free plan daily limit reached. Please upgrade to continue.
             </p>
             <button
-              onClick={() => setShowUpgradeModal(false)}
-              className="px-5 py-2 bg-pink-500 text-white rounded-lg hover:scale-105 transition"
+              onClick={() => setShowLimitModal(false)}
+              className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition"
             >
               Close
             </button>
