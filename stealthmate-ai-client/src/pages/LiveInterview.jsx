@@ -25,13 +25,17 @@ const LiveInterview = () => {
   // 🎤 Mic states
   const [listeningInterviewer, setListeningInterviewer] = useState(false);
   const [listeningCandidate, setListeningCandidate] = useState(false);
-  const recognitionRef = useRef(null);
+  const interviewerRef = useRef(null);
+  const candidateRef = useRef(null);
 
   // 📸 Camera state
   const [showCamera, setShowCamera] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
+
+  // ⚠️ Free plan modal
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const words = answer.split(" ");
 
@@ -53,12 +57,14 @@ const LiveInterview = () => {
     recognition.onresult = (e) => {
       const transcript = e.results[0][0].transcript.trim();
       setQuestion(transcript);
+      askLiveQuestion(transcript); // 🚀 auto-send
     };
 
     recognition.onerror = () => setListeningInterviewer(false);
     recognition.onend = () => setListeningInterviewer(false);
 
     recognition.start();
+    interviewerRef.current = recognition;
   };
 
   // 🧠 Send Q to backend
@@ -73,7 +79,7 @@ const LiveInterview = () => {
       }
     } catch (err) {
       if (err.response?.status === 429) {
-        setAnswer("⚠️ Too many requests. Please wait.");
+        setShowUpgradeModal(true); // ⚠️ show modal
       } else {
         setAnswer("⚠️ Could not process this question.");
       }
@@ -109,13 +115,13 @@ const LiveInterview = () => {
 
     recognition.onend = () => setListeningCandidate(false);
     recognition.start();
-    recognitionRef.current = recognition;
+    candidateRef.current = recognition;
     setListeningCandidate(true);
   };
 
   const stopReading = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
+    if (candidateRef.current) {
+      candidateRef.current.stop();
       setListeningCandidate(false);
       setCurrentWordIndex(-1);
     }
@@ -132,7 +138,11 @@ const LiveInterview = () => {
       setShowCamera(true);
 
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        if ("srcObject" in videoRef.current) {
+          videoRef.current.srcObject = stream;
+        } else {
+          videoRef.current.src = window.URL.createObjectURL(stream);
+        }
         videoRef.current.onloadedmetadata = async () => {
           try {
             await videoRef.current.play();
@@ -180,12 +190,7 @@ const LiveInterview = () => {
         }
 
         setQuestion(extractedText);
-
-        const solveRes = await api.post("/ocr/solve", { extractedText });
-        if (solveRes?.data?.answer) {
-          setAnswer(solveRes.data.answer);
-          setCurrentWordIndex(-1);
-        }
+        askLiveQuestion(extractedText); // 🚀 send to AI
       } catch (err) {
         setAnswer("⚠️ Failed to extract/solve from image.");
       } finally {
@@ -197,38 +202,35 @@ const LiveInterview = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-200 via-white to-purple-200 p-4">
-      <div className="w-full max-w-7xl h-[85vh] bg-white rounded-3xl shadow-[0_4px_30px_rgba(255,0,150,0.4)] grid grid-cols-1 md:grid-cols-3 overflow-hidden">
-
+      <div className="w-full max-w-7xl h-[85vh] bg-white rounded-3xl shadow grid grid-cols-1 md:grid-cols-3 overflow-hidden">
         {/* LEFT PANEL */}
-        <div className="p-6 flex flex-col justify-between border-r border-gray-200 col-span-1 bg-gradient-to-br from-pink-50 to-white rounded-2xl shadow-md">
-          <h1 className="text-2xl font-extrabold text-pink-600 mb-6">StealthMate AI</h1>
+        <div className="p-6 flex flex-col justify-between border-r border-gray-200 col-span-1 bg-gradient-to-br from-pink-50 to-white">
+          <h1 className="text-2xl font-extrabold text-pink-600 mb-6">
+            StealthMate AI
+          </h1>
 
           <div className="flex flex-col gap-10 items-center">
             {/* Camera */}
-            <div className="flex flex-col items-center">
-              <button
-                onClick={openCamera}
-                className="w-20 h-20 flex items-center justify-center rounded-full 
-                           bg-gradient-to-r from-purple-500 to-pink-600 text-white 
-                           shadow-lg hover:scale-110 transition"
-              >
-                <Camera className="w-10 h-10" />
-              </button>
-              <p className="text-sm text-gray-600 mt-2">Enable Camera</p>
-            </div>
+            <button
+              onClick={openCamera}
+              className="w-20 h-20 flex items-center justify-center rounded-full 
+                         bg-gradient-to-r from-purple-500 to-pink-600 text-white 
+                         shadow-lg hover:scale-110 transition"
+            >
+              <Camera className="w-10 h-10" />
+            </button>
+            <p className="text-sm text-gray-600 mt-2">Enable Camera</p>
 
             {/* Mic 1 */}
-            <div className="flex flex-col items-center">
-              <button
-                onClick={listenInterviewer}
-                className={`w-20 h-20 flex items-center justify-center rounded-full 
-                  ${listeningInterviewer ? "bg-red-500" : "bg-gradient-to-r from-pink-500 to-purple-600"} 
-                  text-white shadow-lg hover:scale-110 transition`}
-              >
-                <Mic className="w-10 h-10" />
-              </button>
-              <p className="text-sm text-gray-600 mt-2">Interviewer Mic</p>
-            </div>
+            <button
+              onClick={listenInterviewer}
+              className={`w-20 h-20 flex items-center justify-center rounded-full 
+                ${listeningInterviewer ? "bg-red-500" : "bg-gradient-to-r from-pink-500 to-purple-600"} 
+                text-white shadow-lg hover:scale-110 transition`}
+            >
+              <Mic className="w-10 h-10" />
+            </button>
+            <p className="text-sm text-gray-600 mt-2">Interviewer Mic</p>
           </div>
 
           {/* Question input */}
@@ -254,12 +256,12 @@ const LiveInterview = () => {
 
         {/* RIGHT PANEL */}
         <div className="p-6 flex flex-col h-full relative col-span-2">
-          <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-xl mb-5 shadow-md">
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-xl mb-5 shadow">
             <h2 className="font-semibold text-gray-800 text-lg">❓ Question</h2>
             <p className="text-gray-600 mt-1 text-lg">{question}</p>
           </div>
 
-          <div className="flex-1 bg-gray-900 text-white p-6 rounded-xl shadow-lg flex flex-col w-full relative overflow-y-auto">
+          <div className="flex-1 bg-gray-900 text-white p-6 rounded-xl shadow flex flex-col w-full relative overflow-y-auto">
             <h2 className="font-semibold text-pink-400 text-xl">💡 AI Answer</h2>
             <div className="mt-4 leading-relaxed flex-1 text-lg prose prose-invert max-w-none">
               <ReactMarkdown
@@ -311,13 +313,13 @@ const LiveInterview = () => {
           <div className="flex gap-4 mt-6 justify-center">
             <button
               onClick={() => askLiveQuestion(question)}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg hover:scale-105 transition"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow hover:scale-105 transition"
             >
               <RefreshCcw className="w-4 h-4" /> Re-ask
             </button>
             <button
               onClick={() => (window.location.href = "/history")}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg hover:scale-105 transition"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow hover:scale-105 transition"
             >
               <History className="w-4 h-4" /> History
             </button>
@@ -356,6 +358,26 @@ const LiveInterview = () => {
               />
               <canvas ref={canvasRef} style={{ display: "none" }} />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Free Plan Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl p-6 max-w-sm text-center shadow-lg">
+            <h2 className="text-xl font-bold text-red-600 mb-4">
+              ⚠️ Free plan limit reached
+            </h2>
+            <p className="text-gray-700 mb-4">
+              You’ve used your 3 free questions. Please upgrade to continue.
+            </p>
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="px-5 py-2 bg-pink-500 text-white rounded-lg hover:scale-105 transition"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
