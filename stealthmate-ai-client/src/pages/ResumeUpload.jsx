@@ -35,7 +35,7 @@ const ResumeUpload = () => {
       const token = localStorage.getItem("token");
 
       const formData = new FormData();
-      formData.append("resumeFile", file);
+     formData.append("resume", file);
       formData.append("preferredLanguage", language);
       formData.append("tone", tone);
       formData.append("jobRole", jobRole);

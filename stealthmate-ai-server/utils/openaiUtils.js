@@ -1,58 +1,66 @@
+// stealthmate-ai-server/utils/openaiUtils.js
 const OpenAI = require("openai");
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /**
  * Generate an AI interview answer with resume + extra info context
- * @param {string} question - The interview question
- * @param {object} resume - Resume document from MongoDB (includes text, preferences, extra info)
+ * @param {string} question
+ * @param {object} resume - Mongoose resume doc
  */
-const generateAnswer = async (question, resume) => {
+const generateAnswer = async (question, resume = {}) => {
   try {
-    const resumeText = resume?.resumeText || "";
-    const language = resume?.preferredLanguage || "English";
-    const tone = resume?.tone || "Professional";
-    const role = resume?.jobRole || "Software Developer";
-    const extraInfo = resume?.extraInfo || "";
+    // Extract fields robustly
+    const resumeText = resume.resumeText || resume.parsedText || "";
+    const language = resume.preferredLanguage || "English";
+    const tone = resume.tone || "Professional";
+    const role = resume.jobRole || "Software Developer";
+    const extraInfo = resume.extraInfo || resume.additionalInfo || "";
 
-    // 🎯 Human-like system prompt
+    // System prompt (explicit, restrictive, first-person)
     const systemPrompt = `
-You are StealthMate AI, acting as the candidate in a live interview. 
-Always answer as if *you are the candidate*, speaking naturally and confidently.
-
-⚡ Style Rules:
-- Use first-person language ("I", "my experience", "I worked on…").
-- Be confident but concise, no robotic tone.
-- For technical questions:
-   1. Start with a simple explanation in plain language.
-   2. Then show a short, clear code example (if relevant).
-   3. End with a summary or why it matters.
-- Tailor answers strictly to THIS candidate’s background, role, and extra info.
-
-📄 Candidate Resume:
-${resumeText}
-
-🎯 Target Role: ${role}
-💡 Extra Info: ${extraInfo}
-🗣 Preferred Language: ${language}
-✨ Preferred Tone: ${tone}
+You are StealthMate AI, an assistant that answers interview questions by speaking AS the candidate (first-person "I").
+Important rules:
+- Always tailor the answer to the candidate's resume & extraInfo when applicable.
+- Use first-person statements like "I built..." or "In my experience...".
+- For technical/coding questions:
+  1) Start with a brief plain-language summary.
+  2) Provide a short, complete code example (if relevant).
+  3) Provide a short explanation of the code (line-by-line or paragraph).
+- If the resume does NOT contain enough information to assert a fact, be explicit: "Based on my resume, I have experience with X. If you meant something else, please clarify."
+- Keep answers human-like, natural, and concise. Add small natural fillers only when appropriate (e.g. "I usually...").
+- Prefer correctness over verbosity.
 `;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // 🔄 swap to gpt-3.5-turbo if you want faster
+    const userMessage = `
+Interview question:
+${question}
+
+Candidate resume (extract):
+${resumeText}
+
+Candidate role: ${role}
+Extra info: ${extraInfo}
+Preferred language: ${language}
+Preferred tone: ${tone}
+
+Answer should be tailored to this candidate and follow the rules above.
+`;
+
+    // Use gpt-3.5-turbo for predictable latency; change if you have gpt-4 access
+    const resp = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: question },
+        { role: "user", content: userMessage },
       ],
-      temperature: 0.7, // more natural variation
-      max_tokens: 700,
+      temperature: 0.6,
+      max_tokens: 900,
     });
 
-    return response.choices[0].message.content.trim();
-  } catch (error) {
-    console.error("❌ OpenAI error:", error.message);
+    const content = resp.choices?.[0]?.message?.content;
+    return content ? content.trim() : "⚠️ AI returned an empty answer.";
+  } catch (err) {
+    console.error("OpenAI generateAnswer error:", err?.message || err);
     return "⚠️ Failed to generate a resume-based answer. Please try again.";
   }
 };

@@ -1,34 +1,41 @@
 // stealthmate-ai-server/routes/ocrRoutes.js
-
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const Tesseract = require("tesseract.js");
+const Jimp = require("jimp");
 const authMiddleware = require("../middleware/authMiddleware");
 
-// Multer Setup (store in memory)
+// multer memory
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// 📸 Route: POST /api/ocr/image
 router.post("/image", authMiddleware, upload.single("image"), async (req, res) => {
   try {
-    if (!req.file || !req.file.buffer) {
-      return res.status(400).json({ message: "No image file uploaded" });
-    }
+    if (!req.file || !req.file.buffer) return res.status(400).json({ message: "No image uploaded" });
 
-    // Convert buffer to Base64 with MIME type (permanent fix)
-    const base64Image = `data:image/png;base64,${req.file.buffer.toString("base64")}`;
+    // 1) Load buffer into Jimp and do basic preprocessing
+    const img = await Jimp.read(req.file.buffer);
+    // convert to greyscale, increase contrast, resize to reasonable width for Tesseract
+    img
+      .greyscale()
+      .contrast(0.3)
+      .normalize()
+      .resize(1600, Jimp.AUTO) // upscale small images a bit
+      .quality(85);
 
-    // Run OCR
-    const result = await Tesseract.recognize(base64Image, "eng", {
-      logger: (m) => console.log(m), // logs progress
+    const processedBuffer = await img.getBufferAsync(Jimp.MIME_JPEG);
+
+    // 2) Run Tesseract on processed buffer
+    const { data } = await Tesseract.recognize(processedBuffer, "eng", {
+      logger: m => console.log("TESSERACT:", m) // optional logging
     });
 
-    res.json({ text: result.data.text.trim() });
+    const text = (data && data.text) ? data.text : "";
+    res.json({ text });
   } catch (err) {
-    console.error("❌ OCR error:", err);
-    res.status(500).json({ message: "OCR failed", error: err.message });
+    console.error("OCR error:", err);
+    res.status(500).json({ message: "OCR failed", error: err.message || err });
   }
 });
 
