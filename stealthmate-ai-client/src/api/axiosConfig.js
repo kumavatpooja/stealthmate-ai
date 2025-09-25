@@ -8,9 +8,8 @@ const api = axios.create({
   timeout: 30000,
 });
 
-// attach JWT from localStorage if exists
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("token"); // ✅ must exist
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });

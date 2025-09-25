@@ -1,4 +1,3 @@
-// stealthmate-ai-server/routes/liveInterviewRoutes.js
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
@@ -15,16 +14,18 @@ router.post('/ask', authMiddleware, checkPlanMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Question is required' });
     }
 
-    // 📝 Always fetch the latest uploaded resume
+    // 📝 Fetch latest uploaded resume
     const resume = await Resume.findOne({ user: req.userId }).sort({ uploadedAt: -1 });
+    console.log("📄 Resume fetched for user:", req.userId, "=>", resume ? "FOUND" : "NOT FOUND");
+
     if (!resume) {
       return res.status(400).json({ message: 'Resume data missing. Please upload first.' });
     }
 
-    // 🤖 Generate AI answer using resume
+    // 🤖 Generate AI answer
     const answer = await generateAnswer(question, resume);
 
-    // 💾 Save in InterviewLog
+    // 💾 Save log
     const log = new InterviewLog({
       user: req.userId,
       question,
@@ -35,7 +36,7 @@ router.post('/ask', authMiddleware, checkPlanMiddleware, async (req, res) => {
 
     res.json({ answer });
   } catch (err) {
-    console.error('❌ Live Interview Error:', err);
+    console.error('❌ Live Interview Error:', err.message, err.stack);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
@@ -43,10 +44,11 @@ router.post('/ask', authMiddleware, checkPlanMiddleware, async (req, res) => {
 // 📜 GET: User's live interview history
 router.get('/history', authMiddleware, async (req, res) => {
   try {
-    const logs = await InterviewLog.find({ user: req.userId, source: 'live' }).sort({ createdAt: -1 });
+    const logs = await InterviewLog.find({ user: req.userId, source: 'live' })
+      .sort({ createdAt: -1 });
     res.json(logs);
   } catch (err) {
-    console.error('❌ Fetching history error:', err);
+    console.error('❌ Fetching history error:', err.message);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
