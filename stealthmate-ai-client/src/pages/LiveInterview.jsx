@@ -6,7 +6,6 @@ import {
   Send,
   RefreshCcw,
   History,
-  Square,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -19,9 +18,6 @@ const LiveInterview = () => {
     "React is a JavaScript library for building user interfaces."
   );
 
-  const [currentWordIndex, setCurrentWordIndex] = useState(-1);
-  const [listening, setListening] = useState(false);
-  const recognitionRef = useRef(null);
   const [loading, setLoading] = useState(false);
 
   // 📸 Camera state
@@ -30,9 +26,7 @@ const LiveInterview = () => {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
 
-  const words = answer.split(" ");
-
-  // 🎤 Mic 1 → interviewer question
+  // 🎤 Mic → interviewer question
   const listenInterviewer = () => {
     if (!("webkitSpeechRecognition" in window)) {
       alert("Speech recognition not supported in this browser.");
@@ -42,9 +36,23 @@ const LiveInterview = () => {
     recognition.lang = "en-US";
     recognition.interimResults = false;
 
-    recognition.onresult = (e) => {
+    recognition.onresult = async (e) => {
       const transcript = e.results[0][0].transcript.trim();
-      setQuestion(transcript);
+      console.log("🎤 Raw transcript:", transcript);
+
+      try {
+        // send to backend for clarification
+        const res = await api.post("/live/speech", { text: transcript });
+        const clarifiedQ = res.data?.clarified || transcript;
+        setQuestion(clarifiedQ);
+
+        // auto ask question
+        askLiveQuestion(clarifiedQ);
+      } catch (err) {
+        console.error("❌ Speech clarify failed", err);
+        setQuestion(transcript);
+        askLiveQuestion(transcript);
+      }
     };
 
     recognition.start();
@@ -58,11 +66,12 @@ const LiveInterview = () => {
       const res = await api.post("/live/ask", { question: q });
       if (res?.data?.answer) {
         setAnswer(res.data.answer);
-        setCurrentWordIndex(-1);
       }
     } catch (err) {
       if (err.response?.status === 429) {
-        setAnswer("⚠️ Too many requests. Please wait.");
+        setAnswer("⚠️ Free plan limit reached. Upgrade to continue.");
+      } else if (err.response?.status === 403) {
+        setAnswer("⚠️ Plan expired. Please upgrade.");
       } else {
         setAnswer("⚠️ Could not process this question.");
       }
@@ -71,50 +80,13 @@ const LiveInterview = () => {
     }
   };
 
-  // 🎤 Mic 2 → candidate reading
-  const trackReading = () => {
-    if (!("webkitSpeechRecognition" in window)) {
-      alert("Speech recognition not supported.");
-      return;
-    }
-    const recognition = new window.webkitSpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.continuous = true;
-
-    recognition.onresult = (e) => {
-      const spoken = e.results[e.results.length - 1][0].transcript;
-      const spokenWords = spoken.trim().toLowerCase().split(" ");
-      let matchedIndex = currentWordIndex;
-      for (let i = currentWordIndex + 1; i < words.length; i++) {
-        if (spokenWords.includes(words[i].toLowerCase().replace(/[^\w]/g, ""))) {
-          matchedIndex = i;
-          break;
-        }
-      }
-      if (matchedIndex > currentWordIndex) setCurrentWordIndex(matchedIndex);
-    };
-
-    recognition.onend = () => setListening(false);
-    recognition.start();
-    recognitionRef.current = recognition;
-    setListening(true);
-  };
-
-  const stopReading = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setListening(false);
-      setCurrentWordIndex(-1);
-    }
-  };
-
-  // 📷 Camera (fixed for laptop + mobile)
+  // 📷 Camera
   const openCamera = async () => {
     try {
       console.log("📸 Requesting camera...");
       const constraints = {
         video: {
-          facingMode: { ideal: "environment" }, // back cam on mobile
+          facingMode: "environment", // back camera on mobile
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -126,18 +98,21 @@ const LiveInterview = () => {
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute("playsinline", true); // iOS Safari fix
+
+        // Important fixes for autoplay
+        videoRef.current.setAttribute("playsinline", true);
         videoRef.current.setAttribute("autoplay", true);
         videoRef.current.setAttribute("muted", true);
 
         videoRef.current.onloadedmetadata = () => {
           videoRef.current.play().catch((err) => {
-            console.warn("▶️ Play blocked:", err);
+            console.warn("▶️ Video play blocked:", err);
           });
         };
       }
 
       setShowCamera(true);
+      console.log("✅ Camera stream started");
     } catch (err) {
       console.error("❌ Camera error:", err);
       alert("⚠️ Unable to access camera. Please allow permission & use HTTPS.");
@@ -181,7 +156,6 @@ const LiveInterview = () => {
         const solveRes = await api.post("/ocr/solve", { extractedText });
         if (solveRes?.data?.answer) {
           setAnswer(solveRes.data.answer);
-          setCurrentWordIndex(-1);
         }
       } catch (err) {
         setAnswer("⚠️ Failed to extract/solve from image.");
@@ -213,13 +187,12 @@ const LiveInterview = () => {
             </button>
             <p className="text-sm text-gray-600">Enable Camera</p>
 
-            {/* Mic 1 */}
+            {/* Mic */}
             <button
               onClick={listenInterviewer}
-              className={`w-24 h-24 flex items-center justify-center rounded-full 
-                         ${listening ? "bg-red-500" : "bg-gradient-to-r from-pink-500 to-purple-600"} 
-                         text-white shadow-[0_0_25px_rgba(255,0,150,0.8)] 
-                         hover:scale-110 transition animate-pulse`}
+              className="w-24 h-24 flex items-center justify-center rounded-full 
+                         bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg 
+                         hover:scale-110 transition animate-pulse"
               title="Listen interviewer question"
             >
               <Mic className="w-12 h-12" />
@@ -253,13 +226,13 @@ const LiveInterview = () => {
             <p className="text-gray-600 mt-1 text-lg">{question}</p>
           </div>
 
-          <div className="flex-1 bg-gray-900 text-white p-6 rounded-xl shadow-[0_0_30px_rgba(255,0,150,0.8)] flex flex-col w-full relative">
+          <div className="flex-1 bg-gray-900 text-white p-6 rounded-xl shadow-[0_0_30px_rgba(255,0,150,0.8)] flex flex-col w-full relative overflow-y-auto">
             <h2 className="font-semibold text-pink-400 text-xl">💡 AI Answer</h2>
-            <div className="mt-4 leading-relaxed flex-1 overflow-y-auto text-lg prose prose-invert max-w-none">
+            <div className="mt-4 leading-relaxed flex-1 text-lg prose prose-invert max-w-none">
               <ReactMarkdown
                 children={answer}
                 components={{
-                  code({ node, inline, className, children, ...props }) {
+                  code({ inline, className, children, ...props }) {
                     const match = /language-(\w+)/.exec(className || "");
                     return !inline && match ? (
                       <SyntaxHighlighter
@@ -279,39 +252,18 @@ const LiveInterview = () => {
                 }}
               />
             </div>
-
-            {/* Candidate Reading Mic */}
-            {!listening ? (
-              <button
-                onClick={trackReading}
-                className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-full 
-                           bg-pink-500 hover:bg-pink-600 text-white transition hover:scale-110"
-                title="Track candidate reading"
-              >
-                <Mic className="w-5 h-5" />
-              </button>
-            ) : (
-              <button
-                onClick={stopReading}
-                className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-full 
-                           bg-red-500 hover:bg-red-600 text-white transition hover:scale-110"
-                title="Stop tracking"
-              >
-                <Square className="w-5 h-5" />
-              </button>
-            )}
           </div>
 
           <div className="flex gap-4 mt-6 justify-center">
             <button
               onClick={() => askLiveQuestion(question)}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-[0_0_20px_rgba(255,0,150,0.7)] hover:scale-105 transition"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg hover:scale-105 transition"
             >
               <RefreshCcw className="w-4 h-4" /> Re-ask
             </button>
             <button
               onClick={() => (window.location.href = "/history")}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-[0_0_20px_rgba(255,0,150,0.7)] hover:scale-105 transition"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg hover:scale-105 transition"
             >
               <History className="w-4 h-4" /> History
             </button>
@@ -343,10 +295,10 @@ const LiveInterview = () => {
             <div className="w-full h-[420px] bg-black flex items-center justify-center rounded-md overflow-hidden">
               <video
                 ref={videoRef}
-                className="w-full h-full object-cover"
                 autoPlay
                 playsInline
                 muted
+                className="w-full h-full object-cover"
               />
               <canvas ref={canvasRef} style={{ display: "none" }} />
             </div>
