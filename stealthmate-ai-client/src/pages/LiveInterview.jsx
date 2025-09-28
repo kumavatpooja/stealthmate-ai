@@ -1,4 +1,3 @@
-// src/pages/LiveInterview.jsx
 import React, { useState, useRef, useEffect } from "react";
 import {
   Mic,
@@ -44,13 +43,11 @@ const LiveInterview = () => {
   const words = answer.split(" ");
 
   useEffect(() => {
-    // cleanup on unmount
     return () => {
       stopInterviewerRecognition();
       stopCandidateRecognition();
       stopStream();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ---------------------------
@@ -66,7 +63,6 @@ const LiveInterview = () => {
       return;
     }
 
-    // if candidate mic is running, stop it to avoid conflicts
     if (listeningCandidate) {
       stopCandidateRecognition();
     }
@@ -86,8 +82,6 @@ const LiveInterview = () => {
         const transcript = e.results[0][0].transcript.trim();
         console.log("📝 Interviewer transcript:", transcript);
         setQuestion(transcript);
-
-        // Auto-send after we got final transcript
         askLiveQuestion(transcript);
       };
 
@@ -124,7 +118,7 @@ const LiveInterview = () => {
   };
 
   /* ---------------------------
-     Candidate reading mic (only for highlighting)
+     Candidate reading mic (highlighting)
      --------------------------- */
   const startCandidateRecognition = () => {
     const SR = getSpeechRecognition();
@@ -133,9 +127,7 @@ const LiveInterview = () => {
       return;
     }
 
-    // try to keep both separate — browser may only allow one at a time:
     if (listeningInterviewer) {
-      // stop interviewer temporarily (browser usually prevents two recognitions)
       stopInterviewerRecognition();
     }
 
@@ -162,10 +154,7 @@ const LiveInterview = () => {
         if (matchedIndex > currentWordIndex) setCurrentWordIndex(matchedIndex);
       };
 
-      recognition.onend = () => {
-        setListeningCandidate(false);
-        // attempt to restart interviewer recognition? no — keep user control
-      };
+      recognition.onend = () => setListeningCandidate(false);
 
       recognition.start();
       candidateRecRef.current = recognition;
@@ -180,7 +169,7 @@ const LiveInterview = () => {
       const rec = candidateRecRef.current;
       if (rec && typeof rec.stop === "function") rec.stop();
     } catch (err) {
-      console.warn("stopCandidateRecognition:", err);
+      console.warn("stopCandidateRecognition error:", err);
     } finally {
       candidateRecRef.current = null;
       setListeningCandidate(false);
@@ -189,12 +178,11 @@ const LiveInterview = () => {
   };
 
   /* ---------------------------
-     Send question → backend (with client-side free-plan guard)
+     Send question → backend
      --------------------------- */
   const askLiveQuestion = async (q) => {
     if (loading || !q || q.trim() === "") return;
 
-    // client-side free plan guard
     if (askedCount >= FREE_DAILY_LIMIT) {
       setShowLimitModal(true);
       return;
@@ -202,8 +190,6 @@ const LiveInterview = () => {
 
     try {
       setLoading(true);
-
-      // Increment asked count locally (UI only)
       setAskedCount((c) => c + 1);
 
       const res = await api.post("/live/ask", { question: q });
@@ -216,7 +202,6 @@ const LiveInterview = () => {
     } catch (err) {
       console.error("❌ askLiveQuestion error:", err);
       if (err?.response?.status === 429 || err?.response?.status === 403) {
-        // server says limit reached
         setShowLimitModal(true);
         setAnswer("⚠️ Free plan limit reached. Upgrade to continue.");
       } else if (err?.response?.status === 401) {
@@ -230,7 +215,7 @@ const LiveInterview = () => {
   };
 
   /* ---------------------------
-     Camera: robust open, fallback to simple video if needed
+     Camera handling
      --------------------------- */
   const stopStream = () => {
     try {
@@ -247,53 +232,29 @@ const LiveInterview = () => {
   const openCamera = async () => {
     setCameraError(null);
     try {
-      console.log("📸 Requesting camera...");
-
-      // First try with environment/back camera preference
       const primaryConstraints = {
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
+        video: { facingMode: { ideal: "environment" }, width: 1280, height: 720 },
         audio: false,
       };
 
       let stream = await navigator.mediaDevices.getUserMedia(primaryConstraints);
-
-      // If returned stream appears inactive or has no video tracks, fallback
-      const hasVideoTrack = stream && stream.getVideoTracks && stream.getVideoTracks().length > 0;
-      const active = stream && stream.active;
-
-      if (!hasVideoTrack || !active) {
-        console.warn("Primary camera attempt returned inactive stream — trying fallback.");
-        // close previous tracks
+      if (!stream?.getVideoTracks?.().length || !stream.active) {
         stream.getTracks().forEach((t) => t.stop());
-        // fallback to simple default camera
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       }
 
-      // attach stream
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.muted = true; // avoid audio feedback
+        videoRef.current.muted = true;
         videoRef.current.playsInline = true;
-        // ensure autoplay attempt (some browsers return a Promise)
-        try {
-          await videoRef.current.play();
-        } catch (playErr) {
-          console.warn("▶️ video.play() failed:", playErr);
-        }
+        await videoRef.current.play().catch(() => {});
       }
 
       setShowCamera(true);
-      console.log("✅ Camera stream started", stream);
     } catch (err) {
       console.error("❌ Camera error:", err);
-      setCameraError(
-        "Unable to access camera. Make sure the page is served from https (or localhost), allow camera permission, and close other apps that use camera."
-      );
+      setCameraError("Unable to access camera. Allow permissions & try again.");
       alert("⚠️ Unable to access camera. Please allow permission & try again.");
     }
   };
@@ -308,7 +269,6 @@ const LiveInterview = () => {
     const canvas = canvasRef.current;
     const vid = videoRef.current;
 
-    // compute dims
     const w = vid.videoWidth || vid.clientWidth || 1280;
     const h = vid.videoHeight || vid.clientHeight || 720;
     canvas.width = w;
@@ -322,12 +282,11 @@ const LiveInterview = () => {
         const formData = new FormData();
         formData.append("image", blob, "capture.jpg");
 
-        // OCR endpoint (requires auth via api axios interceptors)
         const ocrRes = await api.post("/ocr/image", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
-        const extractedText = ocrRes.data.text?.trim();
+        const extractedText = ocrRes?.data?.text?.trim();
         if (!extractedText) {
           setAnswer("⚠️ No text detected in image.");
           return;
@@ -335,10 +294,10 @@ const LiveInterview = () => {
 
         setQuestion(extractedText);
 
-        // send to /ocr/solve (server will call OpenAI)
         const solveRes = await api.post("/ocr/solve", { extractedText });
-        if (solveRes?.data?.answer) {
-          setAnswer(solveRes.data.answer);
+        const aiAnswer = solveRes?.data?.answer;
+        if (aiAnswer && typeof aiAnswer === "string") {
+          setAnswer(aiAnswer);
           setCurrentWordIndex(-1);
         } else {
           setAnswer("⚠️ Failed to solve the coding prompt.");
@@ -354,7 +313,7 @@ const LiveInterview = () => {
   };
 
   /* ---------------------------
-     UI / JSX
+     UI
      --------------------------- */
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-200 via-white to-purple-200 p-4">
@@ -377,43 +336,51 @@ const LiveInterview = () => {
               <p className="text-sm text-gray-600 mt-2">Enable Camera</p>
             </div>
 
-            {/* Mobile fallback: file input capture */}
+            {/* Mobile Camera Button (instead of file input) */}
             <div className="text-center">
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="mb-2"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setQuestion("📸 Captured image uploaded. Processing...");
-                  try {
-                    setLoading(true);
-                    const fd = new FormData();
-                    fd.append("image", file);
-                    const ocrRes = await api.post("/ocr/image", fd, {
-                      headers: { "Content-Type": "multipart/form-data" },
-                    });
-                    const extractedText = ocrRes.data.text?.trim();
-                    if (!extractedText) {
-                      setAnswer("⚠️ No text detected in image.");
-                      return;
+              <label className="flex flex-col items-center cursor-pointer">
+                <span className="text-3xl mb-1">📱</span>
+                <span className="text-sm text-gray-600">Mobile Camera</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setQuestion("📸 Captured image uploaded. Processing...");
+                    try {
+                      setLoading(true);
+                      const fd = new FormData();
+                      fd.append("image", file);
+                      const ocrRes = await api.post("/ocr/image", fd, {
+                        headers: { "Content-Type": "multipart/form-data" },
+                      });
+                      const extractedText = ocrRes?.data?.text?.trim();
+                      if (!extractedText) {
+                        setAnswer("⚠️ No text detected in image.");
+                        return;
+                      }
+                      setQuestion(extractedText);
+                      const solveRes = await api.post("/ocr/solve", { extractedText });
+                      const aiAnswer = solveRes?.data?.answer;
+                      if (aiAnswer && typeof aiAnswer === "string") {
+                        setAnswer(aiAnswer);
+                        setCurrentWordIndex(-1);
+                      } else {
+                        setAnswer("⚠️ Failed to solve the coding prompt.");
+                      }
+                    } catch (err) {
+                      console.error(err);
+                      setAnswer("⚠️ Failed to process captured image.");
+                    } finally {
+                      setLoading(false);
                     }
-                    setQuestion(extractedText);
-                    const solveRes = await api.post("/ocr/solve", { extractedText });
-                    if (solveRes?.data?.answer) {
-                      setAnswer(solveRes.data.answer);
-                    }
-                  } catch (err) {
-                    console.error(err);
-                    setAnswer("⚠️ Failed to process captured image.");
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-              />
-              <p className="text-xs text-gray-500">Mobile: take photo to upload</p>
+                  }}
+                />
+              </label>
+              <p className="text-xs text-gray-500 mt-1">Tap above to open mobile camera</p>
             </div>
 
             {/* Interviewer Mic */}
@@ -456,7 +423,7 @@ const LiveInterview = () => {
           </div>
         </div>
 
-        {/* RIGHT PANEL — answer panel kept intact */}
+        {/* RIGHT PANEL */}
         <div className="p-6 flex flex-col h-full relative col-span-2">
           <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-xl mb-5 shadow-md">
             <h2 className="font-semibold text-gray-800 text-lg">❓ Question</h2>
@@ -490,7 +457,6 @@ const LiveInterview = () => {
               />
             </div>
 
-            {/* Candidate reading mic (highlighting support) */}
             {!listeningCandidate ? (
               <button
                 onClick={() => startCandidateRecognition()}
@@ -550,7 +516,6 @@ const LiveInterview = () => {
             </div>
 
             <div className="w-full h-[420px] bg-black flex items-center justify-center rounded-md overflow-hidden">
-              {/* REPLACED video block (robust attributes & style) */}
               <video
                 ref={videoRef}
                 className="w-full h-full object-cover"
