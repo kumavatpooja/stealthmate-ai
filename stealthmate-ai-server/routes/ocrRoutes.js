@@ -1,57 +1,36 @@
+// routes/ocrRoutes.js
 const express = require("express");
 const router = express.Router();
-const multer = require("multer");
-const Tesseract = require("tesseract.js");
-const Jimp = require("jimp");
 const authMiddleware = require("../middleware/authMiddleware");
+const { generateAnswer } = require("../utils/openaiUtils");
 
-// Multer memory storage
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+// ✅ OCR Solve – Treat extracted text as a coding/theory interview question
+router.post("/solve", authMiddleware, async (req, res) => {
+  try {
+    const { extractedText } = req.body;
 
-router.post(
-  "/image",
-  authMiddleware,
-  upload.single("image"),
-  async (req, res) => {
-    try {
-      if (!req.file || !req.file.buffer) {
-        return res.status(400).json({ message: "No image uploaded" });
-      }
-
-      // 1) Load buffer into Jimp safely
-      let img;
-      try {
-        img = await Jimp.read(req.file.buffer);
-      } catch (e) {
-        console.error("❌ Jimp could not read buffer:", e);
-        return res.status(400).json({ message: "Invalid image format" });
-      }
-
-      img
-        .greyscale()
-        .contrast(0.3)
-        .normalize()
-        .resize(1200, Jimp.AUTO)
-        .quality(85);
-
-      const processedBuffer = await img.getBufferAsync(Jimp.MIME_JPEG);
-
-      // 2) Run Tesseract directly on buffer
-      const { data } = await Tesseract.recognize(processedBuffer, "eng", {
-        logger: (m) => console.log("🟣 TESSERACT:", m),
-      });
-
-      const text = data?.text?.trim() || "";
-      res.json({ text });
-    } catch (err) {
-      console.error("❌ OCR error:", err);
-      res.status(500).json({
-        message: "OCR failed",
-        error: err.message || err.toString(),
-      });
+    if (!extractedText) {
+      return res.status(400).json({ message: "No extracted text provided" });
     }
+
+    const prompt = `
+The following text was extracted from an image during an interview:
+"${extractedText}"
+
+⚠️ Important Instructions for AI:
+- Treat this ONLY as an interview question (not resume).
+- If it is about coding, write **clear, correct code** in the appropriate language (Python, Java, JS, etc.) + explain step by step.
+- If it is a theory question, answer concisely but professionally.
+- Do NOT introduce the candidate or say "based on resume". Just give the answer to the question.
+`;
+
+    const answer = await generateAnswer(prompt);
+
+    res.json({ answer });
+  } catch (err) {
+    console.error("❌ OCR Solve Error:", err.message);
+    res.status(500).json({ message: "AI failed to solve OCR question", error: err.message });
   }
-);
+});
 
 module.exports = router;

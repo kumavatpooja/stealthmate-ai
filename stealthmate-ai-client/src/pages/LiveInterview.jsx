@@ -1,3 +1,4 @@
+// src/pages/LiveInterview.jsx
 import React, { useState, useRef, useEffect } from "react";
 import {
   Mic,
@@ -282,7 +283,8 @@ const LiveInterview = () => {
         const formData = new FormData();
         formData.append("image", blob, "capture.jpg");
 
-        const ocrRes = await api.post("/ocr/image", formData, {
+        // ✅ fixed endpoint
+        const ocrRes = await api.post("/api/ocr/image", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
@@ -294,7 +296,8 @@ const LiveInterview = () => {
 
         setQuestion(extractedText);
 
-        const solveRes = await api.post("/ocr/solve", { extractedText });
+        // ✅ fixed endpoint
+        const solveRes = await api.post("/api/ocr/solve", { extractedText });
         const aiAnswer = solveRes?.data?.answer;
         if (aiAnswer && typeof aiAnswer === "string") {
           setAnswer(aiAnswer);
@@ -336,7 +339,7 @@ const LiveInterview = () => {
               <p className="text-sm text-gray-600 mt-2">Enable Camera</p>
             </div>
 
-            {/* Mobile Camera Button (instead of file input) */}
+            {/* Mobile Camera Button */}
             <div className="text-center">
               <label className="flex flex-col items-center cursor-pointer">
                 <span className="text-3xl mb-1">📱</span>
@@ -354,7 +357,9 @@ const LiveInterview = () => {
                       setLoading(true);
                       const fd = new FormData();
                       fd.append("image", file);
-                      const ocrRes = await api.post("/ocr/image", fd, {
+
+                      // ✅ fixed endpoint
+                      const ocrRes = await api.post("/api/ocr/image", fd, {
                         headers: { "Content-Type": "multipart/form-data" },
                       });
                       const extractedText = ocrRes?.data?.text?.trim();
@@ -363,7 +368,9 @@ const LiveInterview = () => {
                         return;
                       }
                       setQuestion(extractedText);
-                      const solveRes = await api.post("/ocr/solve", { extractedText });
+
+                      // ✅ fixed endpoint
+                      const solveRes = await api.post("/api/ocr/solve", { extractedText });
                       const aiAnswer = solveRes?.data?.answer;
                       if (aiAnswer && typeof aiAnswer === "string") {
                         setAnswer(aiAnswer);
