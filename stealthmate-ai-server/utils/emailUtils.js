@@ -5,7 +5,7 @@ const axios = require("axios");
 const gmailTransporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 465,
-  secure: true, // true for 465, false for 587
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -35,11 +35,11 @@ const sendOTP = async (email, otp) => {
     console.error("❌ Gmail send failed, falling back to Resend:", err.message);
 
     try {
-      // ✅ Fallback to Resend API
+      // ✅ Fallback to Resend API (sandbox sender)
       await axios.post(
         "https://api.resend.com/emails",
         {
-          from: "StealthMate AI <onboarding@resend.dev>", // Resend sandbox sender
+          from: "onboarding@resend.dev", // ⚠️ must be exactly this in sandbox
           to: [email],
           subject: mailOptions.subject,
           html: mailOptions.html,
@@ -53,7 +53,7 @@ const sendOTP = async (email, otp) => {
       );
       console.log(`📩 OTP sent to ${email} via Resend`);
     } catch (resendErr) {
-      console.error("❌ Resend fallback also failed:", resendErr.message);
+      console.error("❌ Resend fallback also failed:", resendErr.response?.data || resendErr.message);
       throw new Error("Email sending failed (both Gmail and Resend)");
     }
   }
