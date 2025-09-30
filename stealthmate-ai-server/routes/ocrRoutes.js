@@ -2,97 +2,112 @@
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
-const Tesseract = require("tesseract.js");
-const Jimp = require("jimp");   // ✅ works with jimp@0.16.1
 const authMiddleware = require("../middleware/authMiddleware");
 const OpenAI = require("openai");
+const Resume = require("../models/Resume"); // ✅ fetch active resume
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Multer memory storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 /**
- * ✅ OCR image endpoint
+ * OCR Image → Extract text with Vision
  */
-router.post(
-  "/image",
-  authMiddleware,
-  upload.single("image"),
-  async (req, res) => {
-    try {
-      if (!req.file || !req.file.buffer) {
-        return res.status(400).json({ message: "No image uploaded" });
-      }
-
-      console.log("📥 OCR received:", {
-        name: req.file.originalname,
-        type: req.file.mimetype,
-        size: req.file.size,
-      });
-
-      // 1) Load buffer into Jimp safely
-      let img;
-      try {
-        img = await Jimp.read(req.file.buffer);
-      } catch (e) {
-        console.error("❌ Jimp could not read buffer:", e);
-        return res.status(400).json({ message: "Invalid image format" });
-      }
-
-      // 2) Preprocess image for better OCR
-      img
-        .greyscale()
-        .contrast(0.3)
-        .normalize()
-        .resize(1200, Jimp.AUTO)
-        .quality(85);
-
-      const processedBuffer = await img.getBufferAsync(Jimp.MIME_JPEG);
-
-      // 3) Run Tesseract OCR
-      const { data } = await Tesseract.recognize(processedBuffer, "eng", {
-        logger: (m) => console.log("🟣 TESSERACT:", m),
-      });
-
-      const text = data?.text?.trim() || "";
-      res.json({ text });
-    } catch (err) {
-      console.error("❌ OCR error:", err);
-      res.status(500).json({
-        message: "OCR failed",
-        error: err.message || err.toString(),
-      });
-    }
-  }
-);
-
-/**
- * ✅ OCR → AI solver endpoint
- */
-router.post("/solve", authMiddleware, async (req, res) => {
+router.post("/image", authMiddleware, upload.single("image"), async (req, res) => {
   try {
-    const { extractedText } = req.body;
-
-    if (!extractedText) {
-      return res.status(400).json({ message: "No extracted text provided" });
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ message: "No image uploaded" });
     }
 
-    // Force AI to treat as coding question
+    console.log("📥 OCR received:", {
+      name: req.file.originalname,
+      type: req.file.mimetype,
+      size: req.file.size,
+    });
+
+    const base64Image = req.file.buffer.toString("base64");
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // ✅ smaller but accurate
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
           content:
-            "You are a coding assistant. Always explain step by step. If the question is about code, provide runnable code + explanation. Keep answers clear.",
+            "You are an OCR + interview assistant. Extract text from images (even handwritten). Clean it up so it looks like a proper interview question.",
         },
         {
           role: "user",
-          content: `Solve this problem from an image:\n\n${extractedText}`,
+          content: [
+            {
+              type: "text",
+              text: "Extract and clean the text from this image clearly.",
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${req.file.mimetype};base64,${base64Image}`,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const extractedText = response.choices[0].message.content?.trim() || "";
+    if (!extractedText) {
+      return res.status(400).json({ message: "No text detected in image" });
+    }
+
+    res.json({ text: extractedText });
+  } catch (err) {
+    console.error("❌ OCR Vision error:", err);
+    res.status(500).json({
+      message: "OCR Vision failed",
+      error: err.message || err.toString(),
+    });
+  }
+});
+
+/**
+ * OCR → AI Solver (with Resume Context)
+ */
+router.post("/solve", authMiddleware, async (req, res) => {
+  try {
+    const { extractedText } = req.body;
+    if (!extractedText) {
+      return res.status(400).json({ message: "No extracted text provided" });
+    }
+
+    // ✅ Fetch latest active resume for user
+    const resume = await Resume.findOne({ userId: req.user.id }).sort({ uploadedAt: -1 });
+    const resumeText = resume?.resumeText || "";
+    const jobRole = resume?.jobRole || "";
+    const tone = resume?.tone || "neutral";
+    const preferredLanguage = resume?.preferredLanguage || "English";
+    const extraInfo = resume?.extraInfo || "";
+
+    // ✅ Inject resume + extra info into system prompt
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are StealthMate AI, an interview assistant. 
+Always answer naturally and conversationally (not robotic). 
+Use ${preferredLanguage} language. 
+Tone: ${tone}.
+Job Role: ${jobRole}.
+Resume Context: ${resumeText}.
+Extra Info: ${extraInfo}.
+Make sure your answer reflects the candidate’s real resume, projects, and skills.
+If the question is in Hindi, reply in **natural Hinglish** (casual mix of Hindi + English). 
+If code is required, always provide runnable code with explanation.`,
+        },
+        {
+          role: "user",
+          content: extractedText,
         },
       ],
     });
