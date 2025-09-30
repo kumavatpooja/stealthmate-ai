@@ -3,7 +3,7 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const Tesseract = require("tesseract.js");
-const Jimp = require("jimp");
+const Jimp = require("jimp");   // ✅ works with jimp@0.16.1
 const authMiddleware = require("../middleware/authMiddleware");
 const OpenAI = require("openai");
 
@@ -25,7 +25,6 @@ router.post(
   async (req, res) => {
     try {
       if (!req.file || !req.file.buffer) {
-        console.error("❌ No file received in OCR route");
         return res.status(400).json({ message: "No image uploaded" });
       }
 
@@ -35,6 +34,7 @@ router.post(
         size: req.file.size,
       });
 
+      // 1) Load buffer into Jimp safely
       let img;
       try {
         img = await Jimp.read(req.file.buffer);
@@ -43,7 +43,7 @@ router.post(
         return res.status(400).json({ message: "Invalid image format" });
       }
 
-      // Preprocess for better accuracy
+      // 2) Preprocess image for better OCR
       img
         .greyscale()
         .contrast(0.3)
@@ -53,18 +53,12 @@ router.post(
 
       const processedBuffer = await img.getBufferAsync(Jimp.MIME_JPEG);
 
-      // OCR in English + Hindi
-      const { data } = await Tesseract.recognize(processedBuffer, "eng+hin", {
+      // 3) Run Tesseract OCR
+      const { data } = await Tesseract.recognize(processedBuffer, "eng", {
         logger: (m) => console.log("🟣 TESSERACT:", m),
       });
 
       const text = data?.text?.trim() || "";
-      console.log("✅ OCR extracted text:", text);
-
-      if (!text) {
-        return res.status(200).json({ text: "" }); // send safe response
-      }
-
       res.json({ text });
     } catch (err) {
       console.error("❌ OCR error:", err);
@@ -89,7 +83,7 @@ router.post("/solve", authMiddleware, async (req, res) => {
 
     // Force AI to treat as coding question
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o-mini", // ✅ smaller but accurate
       messages: [
         {
           role: "system",
