@@ -25,8 +25,15 @@ router.post(
   async (req, res) => {
     try {
       if (!req.file || !req.file.buffer) {
+        console.error("❌ No file received in OCR route");
         return res.status(400).json({ message: "No image uploaded" });
       }
+
+      console.log("📥 OCR received:", {
+        name: req.file.originalname,
+        type: req.file.mimetype,
+        size: req.file.size,
+      });
 
       let img;
       try {
@@ -36,15 +43,28 @@ router.post(
         return res.status(400).json({ message: "Invalid image format" });
       }
 
-      img.greyscale().contrast(0.3).normalize().resize(1200, Jimp.AUTO).quality(85);
+      // Preprocess for better accuracy
+      img
+        .greyscale()
+        .contrast(0.3)
+        .normalize()
+        .resize(1200, Jimp.AUTO)
+        .quality(85);
 
       const processedBuffer = await img.getBufferAsync(Jimp.MIME_JPEG);
 
-      const { data } = await Tesseract.recognize(processedBuffer, "eng", {
+      // OCR in English + Hindi
+      const { data } = await Tesseract.recognize(processedBuffer, "eng+hin", {
         logger: (m) => console.log("🟣 TESSERACT:", m),
       });
 
       const text = data?.text?.trim() || "";
+      console.log("✅ OCR extracted text:", text);
+
+      if (!text) {
+        return res.status(200).json({ text: "" }); // send safe response
+      }
+
       res.json({ text });
     } catch (err) {
       console.error("❌ OCR error:", err);
@@ -69,7 +89,7 @@ router.post("/solve", authMiddleware, async (req, res) => {
 
     // Force AI to treat as coding question
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // ✅ smaller but accurate
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
