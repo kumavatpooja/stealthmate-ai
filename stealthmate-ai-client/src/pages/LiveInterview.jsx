@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
-import { Mic, Camera, Send } from "lucide-react";
+import React, { useState, useRef } from "react";
+import { Mic, Send } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -10,25 +10,26 @@ const LiveInterview = () => {
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // mic states
+  // Mic states
   const [listeningInterviewer, setListeningInterviewer] = useState(false);
   const interviewerRecRef = useRef(null);
 
-  // highlight state for Read-Aloud
-  const [highlighted, setHighlighted] = useState("");
-
-  // camera states (only mobile camera kept)
-  const [showCamera, setShowCamera] = useState(false);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
+  // Highlight mic states
+  const [highlightListening, setHighlightListening] = useState(false);
+  const highlightRecRef = useRef(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [spokenWords, setSpokenWords] = useState([]);
+  const [highlightEnabled, setHighlightEnabled] = useState(true);
 
   /* ---------------------------
-     Interviewer Mic (continuous + interim)
+     Speech Recognition Helper
   --------------------------- */
   const getSpeechRecognition = () =>
     window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
+  /* ---------------------------
+     Interviewer Mic
+  --------------------------- */
   const startInterviewerRecognition = () => {
     const SR = getSpeechRecognition();
     if (!SR) {
@@ -83,6 +84,53 @@ const LiveInterview = () => {
   };
 
   /* ---------------------------
+     Highlight Mic (Read Aloud)
+  --------------------------- */
+  const startHighlightRecognition = () => {
+    const SR = getSpeechRecognition();
+    if (!SR) {
+      alert("SpeechRecognition not supported in this browser.");
+      return;
+    }
+    try {
+      const recognition = new SR();
+      recognition.lang = "en-US";
+      recognition.interimResults = true;
+      recognition.continuous = true;
+
+      recognition.onstart = () => setHighlightListening(true);
+
+      recognition.onresult = (e) => {
+        let transcript = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          transcript += e.results[i][0].transcript + " ";
+        }
+
+        const words = transcript.trim().split(" ");
+        setSpokenWords(words);
+        setHighlightedIndex(words.length - 1);
+      };
+
+      recognition.onend = () => setHighlightListening(false);
+
+      recognition.start();
+      highlightRecRef.current = recognition;
+    } catch (err) {
+      console.error("❌ Highlight mic error:", err);
+      setHighlightListening(false);
+    }
+  };
+
+  const stopHighlightRecognition = () => {
+    try {
+      const rec = highlightRecRef.current;
+      if (rec && typeof rec.stop === "function") rec.stop();
+    } catch {}
+    highlightRecRef.current = null;
+    setHighlightListening(false);
+  };
+
+  /* ---------------------------
      OCR Process (upload → extract → solve)
   --------------------------- */
   const processOCR = async (fileOrBlob) => {
@@ -93,8 +141,13 @@ const LiveInterview = () => {
       const formData = new FormData();
       formData.append("image", fileOrBlob);
 
+      const token = localStorage.getItem("token");
+
       const ocrRes = await api.post("/ocr/image", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       const extractedText = ocrRes?.data?.text?.trim();
@@ -105,9 +158,20 @@ const LiveInterview = () => {
 
       setQuestion(extractedText);
 
-      const solveRes = await api.post("/ocr/solve", { extractedText });
+      const solveRes = await api.post(
+        "/ocr/solve",
+        { extractedText },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       const aiAnswer = solveRes?.data?.answer;
-      setAnswer(aiAnswer || "⚠️ Failed to solve the question.");
+
+      setAnswer(
+        aiAnswer
+          ? aiAnswer.replace(/\n{2,}/g, "\n\n")
+          : "⚠️ Failed to solve the question."
+      );
     } catch (err) {
       console.error("❌ OCR process error:", err);
       setAnswer("⚠️ Failed to process image.");
@@ -117,42 +181,34 @@ const LiveInterview = () => {
   };
 
   /* ---------------------------
-     Manual Question (type input)
+     Manual Question (typed input)
   --------------------------- */
   const askLiveQuestion = async (q) => {
     if (!q.trim()) return;
     try {
       setLoading(true);
-      const res = await api.post("/live/ask", { question: q });
-      setAnswer(res?.data?.answer || "⚠️ Failed to generate answer.");
+      const token = localStorage.getItem("token");
+
+      const res = await api.post(
+        "/live/ask",
+        { question: q },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const aiAnswer = res?.data?.answer;
+      setAnswer(
+        aiAnswer
+          ? aiAnswer.replace(/\n{2,}/g, "\n\n")
+          : "⚠️ Failed to generate answer."
+      );
     } catch (err) {
       console.error("❌ askLiveQuestion error:", err);
       setAnswer("⚠️ Could not process this question.");
     } finally {
       setLoading(false);
     }
-  };
-
-  /* ---------------------------
-     Read-Aloud Practice (highlight words as spoken)
-  --------------------------- */
-  const startReadAloudPractice = () => {
-    const SR = getSpeechRecognition();
-    if (!SR) return alert("SpeechRecognition not supported");
-    const recognition = new SR();
-    recognition.lang = "en-US";
-    recognition.interimResults = true;
-    recognition.continuous = true;
-
-    recognition.onresult = (e) => {
-      let spoken = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        spoken += e.results[i][0].transcript + " ";
-      }
-      setHighlighted(spoken.trim());
-    };
-
-    recognition.start();
   };
 
   /* ---------------------------
@@ -167,7 +223,7 @@ const LiveInterview = () => {
           <h1 className="text-lg font-bold text-pink-600 mb-4">StealthMate AI</h1>
 
           <div className="flex flex-col gap-8 items-center">
-            {/* Mobile Upload */}
+            {/* Mobile Camera Upload */}
             <label className="flex flex-col items-center cursor-pointer">
               <span className="text-2xl">📱</span>
               <input
@@ -175,7 +231,9 @@ const LiveInterview = () => {
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                onChange={(e) => e.target.files[0] && processOCR(e.target.files[0])}
+                onChange={(e) =>
+                  e.target.files[0] && processOCR(e.target.files[0])
+                }
               />
               <p className="text-xs text-gray-500">Mobile Camera</p>
             </label>
@@ -183,15 +241,19 @@ const LiveInterview = () => {
             {/* Interviewer Mic */}
             <button
               onClick={() =>
-                listeningInterviewer ? stopInterviewerRecognition() : startInterviewerRecognition()
+                listeningInterviewer
+                  ? stopInterviewerRecognition()
+                  : startInterviewerRecognition()
               }
               className={`w-16 h-16 flex items-center justify-center rounded-full ${
-                listeningInterviewer ? "bg-red-500" : "bg-purple-600"
+                listeningInterviewer ? "bg-red-500" : "bg-green-500"
               } text-white`}
             >
               <Mic className="w-8 h-8" />
             </button>
-            <p className="text-xs text-gray-600">Interviewer Mic</p>
+            <p className="text-xs text-gray-600">
+              {listeningInterviewer ? "Stop Mic" : "Start Mic"}
+            </p>
           </div>
 
           {/* Question Input */}
@@ -219,29 +281,62 @@ const LiveInterview = () => {
             <p className="text-base">{question}</p>
           </div>
 
+          {/* Answer Section */}
           <div className="flex-1 bg-gray-900 text-white p-4 rounded-md overflow-y-auto max-h-[65vh]">
-            <h2 className="font-semibold text-pink-400">💡 AI Answer</h2>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-semibold text-pink-400">💡 AI Answer</h2>
+              <button
+                onClick={() => setHighlightEnabled(!highlightEnabled)}
+                className={`text-xs px-3 py-1 rounded ${
+                  highlightEnabled
+                    ? "bg-green-400 text-black"
+                    : "bg-gray-400 text-white"
+                }`}
+              >
+                Highlight: {highlightEnabled ? "ON" : "OFF"}
+              </button>
+            </div>
+
             <div className="mt-2 text-base leading-relaxed">
-              {answer.split(" ").map((word, idx) => (
-                <span
-                  key={idx}
-                  className={
-                    highlighted.includes(word) ? "bg-yellow-300 text-black" : ""
+              {answer.split(" ").map((word, idx) => {
+                let className = "";
+                if (highlightEnabled) {
+                  if (idx < spokenWords.length - 1) {
+                    className = "bg-yellow-400 text-black px-1 rounded";
+                  } else if (idx === highlightedIndex) {
+                    className =
+                      "bg-orange-500 text-black px-1 rounded font-bold";
                   }
-                >
-                  {word}{" "}
-                </span>
-              ))}
+                }
+                return (
+                  <span key={idx} className={className}>
+                    {word}{" "}
+                  </span>
+                );
+              })}
             </div>
           </div>
 
-          {/* Read Aloud */}
-          <button
-            onClick={startReadAloudPractice}
-            className="mt-3 px-4 py-2 rounded-md bg-pink-500 text-white self-start"
-          >
-            🎙️ Read Aloud
-          </button>
+          {/* Read Aloud Mic */}
+         {/* Read Aloud Mic */}
+<div className="mt-4 flex flex-col items-center">
+  <button
+    onClick={() =>
+      highlightListening
+        ? stopHighlightRecognition()
+        : startHighlightRecognition()
+    }
+    className={`w-16 h-16 flex items-center justify-center rounded-full shadow-md transition-colors ${
+      highlightListening ? "bg-red-500" : "bg-blue-500"
+    } text-white`}
+  >
+    <Mic className="w-8 h-8" />
+  </button>
+  <p className="text-xs text-gray-600 mt-2">
+    {highlightListening ? "Stop Reading" : "Start Reading"}
+  </p>
+</div>
+
         </div>
       </div>
     </div>

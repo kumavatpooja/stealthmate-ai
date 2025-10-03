@@ -1,4 +1,3 @@
-// stealthmate-ai-server/utils/openaiUtils.js
 const OpenAI = require("openai");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -11,8 +10,8 @@ const generateAnswer = async (question, resume = {}) => {
   try {
     // Extract resume fields safely
     const resumeText = resume.resumeText || resume.parsedText || "";
-    const language = resume.preferredLanguage || "English";
-    const tone = resume.tone || "Professional";
+    const language = resume.preferredLanguage || "English"; // English / Hindi / Mixed
+    const tone = resume.tone || "Neutral"; // Professional / Friendly / Formal / Casual
     const role = resume.jobRole || "Software Developer";
     const extraInfo = resume.extraInfo || resume.additionalInfo || "";
 
@@ -26,47 +25,72 @@ const generateAnswer = async (question, resume = {}) => {
     });
 
     // --- System instructions ---
+    let languageInstruction = "";
+
+    if (language.toLowerCase().includes("hindi")) {
+      languageInstruction = `Use **casual Hindi** (simple, spoken style). Avoid robotic/formal Hindi. 
+Example: "Hello mera naam Pooja hai, maine MERN stack pe kaam kiya tha" instead of "Mera naam Pooja hai aur main ek MERN stack developer hoon."`;
+    } else if (language.toLowerCase().includes("mixed")) {
+      languageInstruction = `Use **Hinglish (mix of Hindi + English)** in a natural way. 
+Keep it casual, like how people speak in India. Example: "Maine ek MERN stack project banaya tha jisme React aur Node use kiya."`;
+    } else {
+      languageInstruction = `Use **simple Indian English** (no heavy words). Keep it clear and natural.`;
+    }
+
     const systemPrompt = `
-You are StealthMate AI, an assistant answering interview questions AS the candidate ("I").
-Rules:
-- Tailor to candidate's resume & extraInfo when applicable.
-- Speak naturally in first-person ("I built...", "I experienced...").
-- For technical/coding questions:
-  1. Start with a short explanation.
-  2. Provide complete code in a block.
-  3. Give a short step-by-step explanation.
-- If resume lacks info, say: "Based on my resume, I have experience with X. If you meant something else, please clarify."
-- Keep tone ${tone}, in ${language}.
+You are **StealthMate AI**, answering interview questions AS the candidate ("I").
+Speak in a **natural, conversational style** — like a real person in India, not a textbook.
+
+Language rules:
+${languageInstruction}
+
+Tone: ${tone}.
+Always reflect candidate’s **resume, job role, and extra info**.
+Always answer in **first-person ("I did", "I worked on")**.
+
+For coding/technical questions:
+1. Start with a short explanation in natural tone.  
+2. Provide **clean runnable code** in a code block.  
+3. Add a simple step-by-step explanation after the code.  
+
+Format:
+- Use **short paragraphs** with spacing.  
+- Avoid robotic tone. Make it sound like normal human conversation.  
 `;
 
     const userMessage = `
-Interview question:
+Interview Question:
 ${question}
 
-Candidate resume extract:
+Candidate Resume Extract:
 ${resumeText}
 
-Candidate role: ${role}
-Extra info: ${extraInfo}
+Candidate Role: ${role}
+Extra Info: ${extraInfo}
 `;
 
     // --- OpenAI call ---
     const resp = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
       ],
-      temperature: 0.6,
-      max_tokens: 900,
+      temperature: 0.7, // slightly more creative for human tone
+      max_tokens: 1000,
     });
 
-    const content = resp.choices?.[0]?.message?.content;
+    let content = resp.choices?.[0]?.message?.content || "";
 
     if (!content) {
       console.error("⚠️ OpenAI returned no content. Raw response:", resp);
       return "⚠️ AI did not return an answer. Please try again.";
     }
+
+    // ✅ Ensure paragraph formatting
+    content = content
+      .replace(/\n{2,}/g, "\n\n")
+      .replace(/(\.)(\s+)/g, "$1\n\n"); // break after full stops
 
     return content.trim();
   } catch (err) {
